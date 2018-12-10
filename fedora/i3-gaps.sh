@@ -17,3 +17,5 @@ if hash gdate 2>/dev/null; then dnf install -y i3
 else
   echo "i3-gaps already installed"
 fi
+
+dnf install -y compton
