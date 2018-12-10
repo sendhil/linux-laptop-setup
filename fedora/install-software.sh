@@ -7,24 +7,17 @@ fi
 
 mkdir -p ~/src
 
-# Dev Tools
-dnf install -y make
+# Cish Tools
+dnf install -y make	gcc-c++ clang cmake @development-tools cmake
+dnf install -y neovim vim
 
-# i3
-dnf install -y i3
+# Rofi
+dnf install -y rofi
 
-# i3 gaps
-dnf install -y libxcb-devel xcb-util-keysyms-devel xcb-util-devel xcb-util-wm-devel xcb-util-xrm-devel yajl-devel libXrandr-devel startup-notification-devel libev-devel xcb-util-cursor-devel libXinerama-devel libxkbcommon-devel libxkbcommon-x11-devel pcre-devel pango-devel git gcc automake 
-cd ~/src
-git clone https://github.com/Airblader/i3.git i3-gaps
-cd ~/src/i3-gaps
-autoreconf --force --install
-rm -rf build/
-mkdir -p build && cd build/
-# Disabling sanitizers is important for release versions!
-# The prefix and sysconfdir are, obviously, dependent on the distribution.
-../configure --prefix=/usr --sysconfdir=/etc --disable-sanitizers
-make
-make install
+# Random Tools
+dnf install -y bat
 
+./i3-gaps.sh
+./polybar.sh
+./chrome.sh
 
