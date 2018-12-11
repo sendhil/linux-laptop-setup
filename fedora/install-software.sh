@@ -32,4 +32,4 @@ dnf install -y rofi
 ./i3-gaps.sh
 ./polybar.sh
 ./chrome.sh
-
+./kitty.sh
