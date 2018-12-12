@@ -31,8 +31,8 @@ dnf install -y feh
 dnf install -y rofi
 
 # Kitty
-dnf copr enable oleastre/kitty-terminal
-dnf install kitty
+dnf copr enable -y oleastre/kitty-terminal
+dnf install -y kitty
 
 ./i3-gaps.sh
 ./polybar.sh
