@@ -9,6 +9,8 @@ if [ ! -d ~/src/linux-laptop-setup ]; then
   echo "Cloning Linux Laptop Setup..."
   git clone https://github.com/sendhil/linux-laptop-setup ~/src/linux-laptop-setup
   git clone https://github.com/sendhil/dotfiles ~/src/dotfiles
+  cd ~/src/dotfiles
+  git submodule update --init
 else
   echo "Updating Linux Laptop Setup"
   cd ~/src/linux-laptop-setup

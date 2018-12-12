@@ -25,6 +25,7 @@ npm install -g typescript eslint neovim
 # Utilities
 dnf install -y ripgrep
 dnf install -y bat
+dnf install -y feh
 
 # Rofi
 dnf install -y rofi
