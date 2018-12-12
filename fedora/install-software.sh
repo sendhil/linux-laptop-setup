@@ -77,6 +77,7 @@ dnf install -y kitty
 ./i3-gaps.sh
 ./polybar.sh
 ./chrome.sh
+./better-lock-screen.sh
 
 # Visual Studio Code
 rpm --import https://packages.microsoft.com/keys/microsoft.asc
