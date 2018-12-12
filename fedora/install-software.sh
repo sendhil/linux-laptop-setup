@@ -4,7 +4,6 @@ if [ "$EUID" -ne 0 ]
   then echo "Please run as root"
   exit
 fi
-
 mkdir -p ~/src
 
 # Cish Tools
@@ -20,6 +19,7 @@ dnf install -y python python3 python-pip
 dnf install -y python-devel
 pip install --user virtualenv
 pip install --user neovim
+pip3 install --user neovim
 
 #GoLang
 dnf install -y golang
@@ -41,6 +41,7 @@ dnf install -y atop
 dnf install -y htop
 dnf install -y ShellCheck
 dnf install -y gnupg2
+dnf install -y fzf
 
 # Network
 dnf install -y iperf
@@ -70,6 +71,10 @@ dnf install -y gnome-tweak-tool
 # Kitty
 dnf copr enable -y oleastre/kitty-terminal
 dnf install -y kitty
+
+# Zsh
+dnf install -y zsh
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
 
 ./i3-gaps.sh
 ./polybar.sh
