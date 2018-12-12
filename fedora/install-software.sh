@@ -29,7 +29,10 @@ dnf install -y bat
 # Rofi
 dnf install -y rofi
 
+# Kitty
+dnf copr enable oleastre/kitty-terminal
+dnf install kitty
+
 ./i3-gaps.sh
 ./polybar.sh
 ./chrome.sh
-./kitty.sh
