@@ -42,6 +42,8 @@ dnf install -y htop
 dnf install -y ShellCheck
 dnf install -y gnupg2
 dnf install -y fzf
+dnf install -y httpie
+dnf install -y ranger
 
 # Network
 dnf install -y iperf
@@ -80,7 +82,7 @@ dnf install -y kitty
 rpm --import https://packages.microsoft.com/keys/microsoft.asc
 sh -c 'echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/vscode.repo'
 dnf check-update
-dnf install code
+dnf install -y code
 
 # Zsh
 dnf install -y zsh
