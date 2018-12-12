@@ -15,12 +15,6 @@ dnf install -y stow
 dnf install -y neovim
 dnf install -y vim
 
-# Visual Studio Code
-rpm --import https://packages.microsoft.com/keys/microsoft.asc
-sh -c 'echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/vscode.repo'
-dnf check-update
-dnf install code
-
 #Python
 dnf install -y python python3 python-pip
 dnf install -y python-devel
@@ -80,3 +74,9 @@ dnf install -y kitty
 ./i3-gaps.sh
 ./polybar.sh
 ./chrome.sh
+
+# Visual Studio Code
+rpm --import https://packages.microsoft.com/keys/microsoft.asc
+sh -c 'echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/vscode.repo'
+dnf check-update
+dnf install code
