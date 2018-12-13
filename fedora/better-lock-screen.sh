@@ -6,4 +6,5 @@ USER_HOME=$(getent passwd $SUDO_USER | cut -d: -f6)
 cd ${USER_HOME}/src
 git clone https://github.com/sendhil/betterlockscreen
 cd betterlockscreen
+mkdir -p ${USER_HOME}/.local/bin
 cp betterlockscreen ${USER_HOME}/.local/bin/
