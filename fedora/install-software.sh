@@ -74,6 +74,10 @@ dnf install -y gnome-tweak-tool
 dnf copr enable -y oleastre/kitty-terminal
 dnf install -y kitty
 
+# Slack
+dnf install -y flatpack
+flatpak install https://flathub.org/repo/appstream/com.slack.Slack.flatpakref
+
 ./i3-gaps.sh
 ./polybar.sh
 ./chrome.sh
