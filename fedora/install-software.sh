@@ -43,7 +43,11 @@ dnf install -y ShellCheck
 dnf install -y gnupg2
 dnf install -y fzf
 dnf install -y httpie
-dnf install -y ranger
+dnf install -y ranger # file manager
+dnf install -y xbacklight
+dnf install -y acpi # battery
+dnf install -y NetworkManager-tui
+dnf instal -y light # Controls screen brightness
 
 # Network
 dnf install -y iperf
