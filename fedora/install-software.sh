@@ -84,6 +84,7 @@ flatpak install https://flathub.org/repo/appstream/com.slack.Slack.flatpakref
 
 ./i3-gaps.sh
 ./polybar.sh
+./fpp.sh
 ./chrome.sh
 ./better-lock-screen.sh
 
