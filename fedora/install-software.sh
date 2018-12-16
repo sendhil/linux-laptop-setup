@@ -51,6 +51,7 @@ dnf install -y light # Controls screen brightness
 dnf install -y hugo
 dnf install -y powertop 
 dnf install -y gucharmap
+dnf install -y crudini
  
 # Network
 dnf install -y iperf
