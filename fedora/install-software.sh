@@ -47,7 +47,7 @@ dnf install -y ranger # file manager
 dnf install -y xbacklight
 dnf install -y acpi # battery
 dnf install -y NetworkManager-tui
-dnf instal -y light # Controls screen brightness
+dnf install -y light # Controls screen brightness
 
 # Network
 dnf install -y iperf
