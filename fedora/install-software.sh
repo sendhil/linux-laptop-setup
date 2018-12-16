@@ -48,7 +48,10 @@ dnf install -y xbacklight
 dnf install -y acpi # battery
 dnf install -y NetworkManager-tui
 dnf install -y light # Controls screen brightness
-
+dnf install -y hugo
+dnf install -y powertop 
+dnf install -y gucharmap
+ 
 # Network
 dnf install -y iperf
 dnf install -y nmap
