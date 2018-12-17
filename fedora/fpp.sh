@@ -4,6 +4,7 @@
 USER_HOME=$(getent passwd $SUDO_USER | cut -d: -f6)
 
 cd ${USER_HOME}/src
+mkdir -p ${USER_HOME}/.local/bin
 
 sudo -u $SUDO_USER bash << EOF
   cd ${USER_HOME}/.local
