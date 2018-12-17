@@ -23,6 +23,7 @@ pip3 install --user neovim
 
 #GoLang
 dnf install -y golang
+dnf install -y dep
 
 #NodeJS
 dnf install -y nodejs
@@ -52,6 +53,7 @@ dnf install -y hugo
 dnf install -y powertop 
 dnf install -y gucharmap
 dnf install -y crudini
+go get -u github.com/sendhil/bookmarks/...  # My bookmark utility
  
 # Network
 dnf install -y iperf
