@@ -18,9 +18,11 @@ dnf install -y vim
 #Python
 dnf install -y python python3 python-pip
 dnf install -y python-devel
-pip install --user virtualenv
-pip install --user neovim
-pip3 install --user neovim
+sudo -u $SUDO_USER bash << EOF
+  pip install --user virtualenv
+  pip install --user neovim
+  pip3 install --user neovim
+EOF
 
 #GoLang
 dnf install -y golang
