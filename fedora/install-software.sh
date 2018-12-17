@@ -54,7 +54,6 @@ dnf install -y hugo
 dnf install -y powertop 
 dnf install -y gucharmap
 dnf install -y crudini
-go get -u github.com/sendhil/bookmarks/...  # My bookmark utility
  
 # Network
 dnf install -y iperf
@@ -85,21 +84,11 @@ dnf install -y gnome-tweak-tool
 dnf copr enable -y oleastre/kitty-terminal
 dnf install -y kitty
 
-# Slack
-dnf install -y flatpack
-flatpak install https://flathub.org/repo/appstream/com.slack.Slack.flatpakref
-
 ./i3-gaps.sh
 ./polybar.sh
 ./fpp.sh
 ./chrome.sh
 ./better-lock-screen.sh
-
-# Visual Studio Code
-rpm --import https://packages.microsoft.com/keys/microsoft.asc
-sh -c 'echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/vscode.repo'
-dnf check-update
-dnf install -y code
 
 # Zsh
 dnf install -y zsh
