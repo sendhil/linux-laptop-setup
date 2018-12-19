@@ -62,6 +62,7 @@ dnf install -y iperf
 dnf install -y nmap
 dnf install -y ipmitool
 dnf install -y wireshark
+dnf install -y ngrep
 
 # Docker
 dnf install -y docker
