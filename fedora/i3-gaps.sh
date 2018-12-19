@@ -18,22 +18,8 @@ sudo -u $SUDO_USER bash << EOF
  # Disabling sanitizers is important for release versions!
  # The prefix and sysconfdir are, obviously, dependent on the distribution.
  ../configure --prefix=/usr --sysconfdir=/etc --disable-sanitizers
- make
+ make -j8
 EOF
 
 cd ${USER_HOME}/src/i3-gaps/build
 make install
-
-# cd ${USER_HOME}/src
-#
-# cd ${USER_HOME}/src/i3-gaps
-#
-# autoreconf --force --install
-# rm -rf build/
-# mkdir -p build && cd build/
-#
-# # Disabling sanitizers is important for release versions!
-# # The prefix and sysconfdir are, obviously, dependent on the distribution.
-# ../configure --prefix=/usr --sysconfdir=/etc --disable-sanitizers
-# make
-# make install
