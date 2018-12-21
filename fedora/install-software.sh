@@ -43,6 +43,7 @@ dnf install -y strace
 dnf install -y dstat
 dnf install -y atop
 dnf install -y htop
+go get thub.com/cjbassi/gotop
 dnf install -y ShellCheck
 dnf install -y gnupg2
 dnf install -y fzf
