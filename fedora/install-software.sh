@@ -27,6 +27,7 @@ EOF
 #GoLang
 dnf install -y golang
 dnf install -y dep
+dnf install -y glide
 
 #NodeJS
 dnf install -y nodejs
