@@ -9,6 +9,9 @@ echo "Installing DropBox"
 echo "Installing Bookmark Utility"
 go get -u github.com/sendhil/bookmarks/...  # My bookmark utility
 
+echo "Installing KubeCtl"
+./kubectl.sh
+
 # Slack
 sudo dnf install -y flatpack
 flatpak install https://flathub.org/repo/appstream/com.slack.Slack.flatpakref

@@ -57,6 +57,7 @@ dnf install -y hugo
 dnf install -y powertop 
 dnf install -y gucharmap
 dnf install -y crudini
+dnf install -y sxiv
  
 # Network
 dnf install -y iperf
