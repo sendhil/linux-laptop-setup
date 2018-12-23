@@ -12,6 +12,9 @@ go get -u github.com/sendhil/bookmarks/...  # My bookmark utility
 echo "Installing KubeCtl"
 ./kubectl.sh
 
+echo "Installing Minikube"
+./minikube.sh
+
 # Slack
 sudo dnf install -y flatpack
 flatpak install https://flathub.org/repo/appstream/com.slack.Slack.flatpakref
