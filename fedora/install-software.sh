@@ -45,7 +45,7 @@ dnf install -y dstat
 dnf install -y sysstat
 dnf install -y atop
 dnf install -y htop
-go get thub.com/cjbassi/gotop
+go get github.com/cjbassi/gotop
 dnf install -y ShellCheck
 dnf install -y gnupg2
 dnf install -y fzf
