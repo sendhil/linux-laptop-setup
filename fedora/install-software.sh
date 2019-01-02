@@ -41,6 +41,7 @@ dnf install -y rofi
 dnf install -y tmux
 dnf install -y jq
 dnf install -y strace
+dnf install -y ltrace
 dnf install -y dstat
 dnf install -y sysstat
 dnf install -y atop
