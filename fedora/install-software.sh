@@ -42,6 +42,7 @@ dnf install -y tmux
 dnf install -y jq
 dnf install -y strace
 dnf install -y dstat
+dnf install -y sysstat
 dnf install -y atop
 dnf install -y htop
 go get thub.com/cjbassi/gotop
