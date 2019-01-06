@@ -28,6 +28,7 @@ EOF
 dnf install -y golang
 dnf install -y dep
 dnf install -y glide
+go get -u github.com/go-delve/delve/cmd/dlv
 
 #NodeJS
 dnf install -y nodejs
