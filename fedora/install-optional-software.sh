@@ -15,6 +15,8 @@ echo "Installing KubeCtl"
 echo "Installing Minikube"
 ./minikube.sh
 
+sudo dnf install -y ncmpcpp
+
 # Slack
 sudo dnf install -y flatpack
 flatpak install https://flathub.org/repo/appstream/com.slack.Slack.flatpakref
