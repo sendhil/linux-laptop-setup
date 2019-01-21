@@ -64,6 +64,7 @@ dnf install -y powertop
 dnf install -y gucharmap
 dnf install -y crudini
 dnf install -y sxiv
+dnf install -y unclutter
  
 # Network
 dnf install -y iperf
