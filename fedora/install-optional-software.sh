@@ -15,6 +15,9 @@ echo "Installing KubeCtl"
 echo "Installing Minikube"
 ./minikube.sh
 
+echo "Installing Unclutter-XFixes"
+./unclutter-xfixes.sh
+
 sudo dnf install -y ncmpcpp
 
 # Slack
