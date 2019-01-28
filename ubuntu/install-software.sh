@@ -8,7 +8,7 @@ fi
 mkdir -p ~/src
 
 # Cish Tools
-apt-get install -y make	gcc-c++ clang cmake @development-tools cmake
+apt-get install -y make	build-essential clang cmake 
 apt-get install -y stow
 
 # Dev Env
@@ -16,8 +16,8 @@ apt-get install -y neovim
 apt-get install -y vim
 
 #Python
-apt-get install -y python python3 python-pip
-apt-get install -y python-devel
+apt-get install -y python python3 python-pip python3-p
+apt-get install -y python-dev
 sudo -u $SUDO_USER bash << EOF
   pip install --user virtualenv
   pip install --user neovim
