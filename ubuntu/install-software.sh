@@ -72,6 +72,7 @@ apt-get install -y powertop
 apt-get install -y gucharmap
 apt-get install -y crudini
 apt-get install -y sxiv
+apt-get install -y tree
  
 # Network
 apt-get install -y iperf
@@ -79,6 +80,7 @@ apt-get install -y nmap
 apt-get install -y ipmitool
 apt-get install -y wireshark
 apt-get install -y ngrep
+apt-get install -y nettools
 
 # Docker
 apt-get install -y docker
