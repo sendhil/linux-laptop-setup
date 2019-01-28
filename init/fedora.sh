@@ -1,9 +1,9 @@
 #!/bin/bash -e
 
-echo "Laptop Setup (Fedora)"
+echo "Laptop Setup (Ubuntu)"
 
 echo "Installing git..."
-sudo dnf install -yq git
+sudo apt-get install -yq git
 
 if [ ! -d ~/src/linux-laptop-setup ]; then
   echo "Cloning Linux Laptop Setup..."
