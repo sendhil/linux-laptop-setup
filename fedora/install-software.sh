@@ -22,6 +22,7 @@ sudo -u $SUDO_USER bash << EOF
   pip install --user virtualenv
   pip install --user neovim
   pip3 install --user neovim
+  pip3 install --user httplib2
 EOF
 
 #GoLang
