@@ -39,7 +39,6 @@ npm install -g typescript eslint neovim
 
 # Utilities
 apt-get install -y cargo
-cargo install ripgrep
 apt-get install -y ripgrep
 # cargo install bat
 apt-get install -y feh
@@ -81,7 +80,7 @@ apt-get install -y nmap
 apt-get install -y ipmitool
 apt-get install -y wireshark
 apt-get install -y ngrep
-apt-get install -y nettools
+apt-get install -y net-tools
 
 # Docker
 apt-get install -y docker
