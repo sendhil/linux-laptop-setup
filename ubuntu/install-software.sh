@@ -38,8 +38,9 @@ apt-get install -y npm
 npm install -g typescript eslint neovim
 
 # Utilities
-apt-get install -y ripgrep
 apt-get install -y cargo
+cargo install ripgrep
+apt-get install -y ripgrep
 # cargo install bat
 apt-get install -y feh
 apt-get install -y rofi
