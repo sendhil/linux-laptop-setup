@@ -19,7 +19,7 @@ echo "Installing Unclutter-XFixes"
 ./unclutter-xfixes.sh
 
 apt-get install -y ncmpcpp
-apt-get install redshift
+apt-get install -y redshift
 
 # Slack
 sudo apt-get install -y flatpak

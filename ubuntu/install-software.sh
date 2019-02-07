@@ -70,6 +70,7 @@ apt-get install -y gucharmap
 apt-get install -y crudini
 apt-get install -y sxiv
 apt-get install -y tree
+apt-get install -y dunst
  
 # Network
 apt-get install -y iperf
