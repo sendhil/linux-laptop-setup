@@ -39,7 +39,6 @@ npm install -g typescript eslint neovim
 
 # Utilities
 apt-get install -y cargo
-cargo install ripgrep
 apt-get install -y ripgrep
 # cargo install bat
 apt-get install -y feh
@@ -65,9 +64,6 @@ apt-get install -y ranger # file manager
 apt-get install -y xbacklight
 apt-get install -y acpi # battery
 apt-get install -y light # Controls screen brightness
-wget https://github.com/haikarainen/light/releases/download/v1.2/light_1.2_amd64.deb
-sudo dpkg -i light_1.2_amd64.deb
-rm light_1.2_amd64.deb
 apt-get install -y hugo
 apt-get install -y powertop 
 apt-get install -y gucharmap
@@ -81,7 +77,7 @@ apt-get install -y nmap
 apt-get install -y ipmitool
 apt-get install -y wireshark
 apt-get install -y ngrep
-apt-get install -y nettools
+apt-get install -y net-tools
 
 # Docker
 apt-get install -y docker
