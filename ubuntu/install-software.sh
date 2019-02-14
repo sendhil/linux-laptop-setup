@@ -64,6 +64,7 @@ apt-get install -y powertop
 apt-get install -y gucharmap
 apt-get install -y crudini
 apt-get install -y sxiv
+apt-get install -y flameshot
  
 # Network
 apt-get install -y iperf
