@@ -66,6 +66,7 @@ dnf install -y gucharmap
 dnf install -y crudini
 dnf install -y sxiv
 dnf install -y dunst
+dnf install -y flameshot
  
 # Network
 dnf install -y iperf
