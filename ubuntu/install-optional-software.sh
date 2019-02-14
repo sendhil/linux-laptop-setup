@@ -18,10 +18,11 @@ echo "Installing Minikube"
 echo "Installing Unclutter-XFixes"
 ./unclutter-xfixes.sh
 
-sudo apt-get install -y ncmpcpp
+apt-get install -y ncmpcpp
+apt-get install -y redshift
 
 # Slack
-sudo apt-get install -y flatpack
+sudo apt-get install -y flatpak
 flatpak install https://flathub.org/repo/appstream/com.slack.Slack.flatpakref
 
 # Visual Studio Code
@@ -31,5 +32,4 @@ sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable
 apt-get install apt-transport-https apt-get update
 apt-get install code # or code-insiders
 
-apt-get install redshift
 

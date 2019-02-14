@@ -19,9 +19,10 @@ echo "Installing Unclutter-XFixes"
 ./unclutter-xfixes.sh
 
 sudo dnf install -y ncmpcpp
+sudo dnf install -y redshift
 
 # Slack
-sudo dnf install -y flatpack
+sudo dnf install -y flatpak
 flatpak install https://flathub.org/repo/appstream/com.slack.Slack.flatpakref
 
 # Visual Studio Code
