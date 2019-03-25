@@ -72,6 +72,7 @@ apt-get install -y sxiv
 apt-get install -y tree
 apt-get install -y dunst
 apt-get install -y flameshot
+apt-get install -y blueman
  
 # Network
 apt-get install -y iperf
