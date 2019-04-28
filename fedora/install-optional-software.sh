@@ -20,6 +20,7 @@ echo "Installing Unclutter-XFixes"
 
 sudo dnf install -y ncmpcpp
 sudo dnf install -y redshift
+sudo dnf install -y pandoc
 
 # Slack
 sudo dnf install -y flatpak
