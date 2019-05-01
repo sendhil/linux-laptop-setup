@@ -9,6 +9,9 @@ echo "Installing DropBox"
 echo "Installing Bookmark Utility"
 go get -u github.com/sendhil/bookmarks/...  # My bookmark utility
 
+echo "Installing Countdown"
+go get -u github.com/antonmedv/countdown
+
 echo "Installing KubeCtl"
 ./kubectl.sh
 
