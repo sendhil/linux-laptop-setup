@@ -17,7 +17,7 @@ dnf install -y vim
 
 #Python
 dnf install -y python python3 python-pip
-dnf install -y python-devel
+dnf install -y python-devel python3-devel
 sudo -u $SUDO_USER bash << EOF
   pip install --user virtualenv
   pip install --user neovim
