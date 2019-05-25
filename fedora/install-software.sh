@@ -67,6 +67,7 @@ dnf install -y crudini
 dnf install -y sxiv
 dnf install -y dunst
 dnf install -y flameshot
+dnf install -y nethogs
  
 # Network
 dnf install -y iperf
