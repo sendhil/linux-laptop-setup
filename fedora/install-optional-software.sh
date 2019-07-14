@@ -29,6 +29,10 @@ sudo dnf install -y pandoc
 sudo dnf install -y flatpak
 flatpak install https://flathub.org/repo/appstream/com.slack.Slack.flatpakref
 
+# Rust
+echo "Installing rust"
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
 # Visual Studio Code
 if [ -f /etc/redhat-release ]; then
   rpm --import https://packages.microsoft.com/keys/microsoft.asc
