@@ -68,6 +68,7 @@ dnf install -y sxiv
 dnf install -y dunst
 dnf install -y flameshot
 dnf install -y nethogs
+dnf install -y pavucontrol
  
 # Network
 dnf install -y iperf
