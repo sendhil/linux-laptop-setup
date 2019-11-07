@@ -38,6 +38,7 @@ npm install -g typescript eslint neovim
 # Utilities
 dnf install -y ripgrep
 dnf install -y bat
+dnf install -y fd-find
 dnf install -y feh
 dnf install -y rofi
 dnf install -y tmux
@@ -68,6 +69,7 @@ dnf install -y sxiv
 dnf install -y dunst
 dnf install -y flameshot
 dnf install -y nethogs
+dnf install -y pavucontrol
  
 # Network
 dnf install -y iperf
