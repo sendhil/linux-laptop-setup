@@ -102,6 +102,9 @@ dnf install -y gnome-tweak-tool
 dnf copr enable -y oleastre/kitty-terminal
 dnf install -y kitty
 
+# Databases
+dnf install -y postgresql
+
 ./i3-gaps.sh
 ./polybar.sh
 ./fpp.sh
