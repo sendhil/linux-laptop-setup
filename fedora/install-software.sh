@@ -30,6 +30,7 @@ dnf install -y golang
 dnf install -y dep
 dnf install -y glide
 go get -u github.com/go-delve/delve/cmd/dlv
+./go-migrate.sh
 
 #NodeJS
 dnf install -y nodejs
