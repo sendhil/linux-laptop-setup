@@ -7,6 +7,8 @@ fi
 
 mkdir -p ~/src
 
+dnf -y install dnf-plugins-core
+
 # Cish Tools
 dnf install -y make	gcc-c++ clang cmake @development-tools cmake
 dnf install -y stow
@@ -81,7 +83,9 @@ dnf install -y ngrep
 dnf install -y ctags
 
 # Docker
-dnf install -y docker
+
+dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+dnf install docker-ce docker-ce-cli containerd.io
 systemctl enable docker
 systemctl start docker
 
