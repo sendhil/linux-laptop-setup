@@ -40,3 +40,6 @@ tar zxvf kustomize.tar.gz
 cp kustomize ~/.local/bin
 rm kustomize.tar.gz
 rm kustomize
+
+# Install Kind
+go get -u sigs.k8s.io/kind
