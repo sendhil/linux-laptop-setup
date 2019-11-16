@@ -43,3 +43,14 @@ rm kustomize
 
 # Install Kind
 go get -u sigs.k8s.io/kind
+
+echo "Installing Kubectx"
+git clone https://github.com/ahmetb/kubectx /opt/kubectx
+
+sudo -u $SUDO_USER zsh << EOF
+  sudo ln -s /opt/kubectx/kubectx ~/.local/bin/kubectx
+  sudo ln -s /opt/kubectx/kubens ~/.local/bin/kubens
+  sudo ln -s /opt/kubectx/completion/kubectx.zsh ~/.oh-my-zsh/completions/_kubctx.zsh
+  sudo ln -s /opt/kubectx/completion/kubens.zsh ~/.oh-my-zsh/completions/_kubens.zsh
+  rm -f ~/.zcompdump;
+EOF
