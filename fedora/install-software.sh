@@ -46,6 +46,7 @@ dnf install -y feh
 dnf install -y rofi
 dnf install -y tmux
 dnf install -y jq
+pip3 install --user yq
 dnf install -y strace
 dnf install -y ltrace
 dnf install -y dstat
