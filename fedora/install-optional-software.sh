@@ -18,7 +18,7 @@ echo "Installing Countdown"
 go get -u github.com/antonmedv/countdown
 
 echo "Installing Kubernetes Tools"
-./kuberentes-tools.sh
+./kubernetes-tools.sh
 
 echo "Installing Unclutter-XFixes"
 ./unclutter-xfixes.sh
