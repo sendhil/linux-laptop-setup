@@ -1,5 +1,10 @@
 #!/bin/bash -e
 
+if [ "$EUID" -eq 0 ]
+  then echo "Please don't run as root"
+  exit
+fi
+
 # Helm
 echo "Installing Helm"
 curl -o helm.tar.gz https://get.helm.sh/helm-v3.0.0-rc.2-linux-amd64.tar.gz
@@ -10,7 +15,7 @@ rm -rf linux-amd64
 
 # Kubectl
 echo "Installing Kubectl"
-cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+sudo cat <<EOF > /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
 baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
@@ -19,7 +24,7 @@ gpgcheck=1
 repo_gpgcheck=1
 gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
 EOF
-dnf install -y kubectl
+sudo dnf install -y kubectl
 
 # Install Minikube
 
@@ -45,8 +50,7 @@ rm kustomize
 go get -u sigs.k8s.io/kind
 
 echo "Installing Kubectx"
-git clone https://github.com/ahmetb/kubectx /opt/kubectx
-
+sudo git clone https://github.com/ahmetb/kubectx /opt/kubectx
 sudo -u $SUDO_USER zsh << EOF
   sudo ln -s /opt/kubectx/kubectx ~/.local/bin/kubectx
   sudo ln -s /opt/kubectx/kubens ~/.local/bin/kubens

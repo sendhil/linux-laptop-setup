@@ -74,6 +74,7 @@ dnf install -y dunst
 dnf install -y flameshot
 dnf install -y nethogs
 dnf install -y pavucontrol
+dnf install -y ImageMagick
  
 # Network
 dnf install -y iperf
@@ -118,5 +119,8 @@ dnf install -y postgresql
 ./better-lock-screen.sh
 
 # Zsh
-dnf install -y zsh
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+if [ ! -d ~/.oh-my-zsh ]; then
+  echo "Installing zsh and oh-my-zsh"
+  dnf install -y zsh
+  sh -c "$(curl -fsSL https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+fi
