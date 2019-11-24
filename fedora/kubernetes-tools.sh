@@ -11,6 +11,7 @@ curl -o helm.tar.gz https://get.helm.sh/helm-v3.0.0-rc.2-linux-amd64.tar.gz tar 
 cp linux-amd64/helm ~/.local/bin
 rm helm.tar.gz
 rm -rf linux-amd64
+helm repo add stable https://kubernetes-charts.storage.googleapis.com
 
 # Kubectl
 echo "Installing Kubectl"
