@@ -1,11 +1,11 @@
 # Fedora
 
-curl -s https://raw.githubusercontent.com/sendhil/linux-lapto-setup/master/init/fedora.sh | bash
+curl -s https://raw.githubusercontent.com/sendhil/linux-laptop-setup/master/init/fedora.sh | bash
 
 
 # Ubuntu
 
-curl -s https://raw.githubusercontent.com/sendhil/linux-lapto-setup/master/init/ubuntu.sh | bash
+curl -s https://raw.githubusercontent.com/sendhil/linux-laptop-setup/master/init/ubuntu.sh | bash
 
 # i3gaps
 
