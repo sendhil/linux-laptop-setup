@@ -1,5 +1,10 @@
 #!/bin/bash -e
 
+if [ "$EUID" -eq 0 ]
+  then echo "Please don't run as root"
+  exit
+fi
+
 echo "Installing Simplenote"
 ./simplenote.sh
 
@@ -12,11 +17,8 @@ go get -u github.com/sendhil/bookmarks/...  # My bookmark utility
 echo "Installing Countdown"
 go get -u github.com/antonmedv/countdown
 
-echo "Installing KubeCtl"
-./kubectl.sh
-
-echo "Installing Minikube"
-./minikube.sh
+echo "Installing Kubernetes Tools"
+./kubernetes-tools.sh
 
 echo "Installing Unclutter-XFixes"
 ./unclutter-xfixes.sh
@@ -24,7 +26,7 @@ echo "Installing Unclutter-XFixes"
 sudo dnf install -y ncmpcpp
 sudo dnf install -y redshift
 sudo dnf install -y pandoc
-sudo dnf install -y mongodb
+# sudo dnf install -y mongodb
 
 # Slack
 sudo dnf install -y flatpak
@@ -33,6 +35,14 @@ flatpak install https://flathub.org/repo/appstream/com.slack.Slack.flatpakref
 # Rust
 echo "Installing rust"
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Fira Code
+dnf copr enable evana/fira-code-fonts
+dnf install fira-code-fonts
+
+# Brave
+echo "Installing Brave"
+./brave.sh
 
 # Visual Studio Code
 if [ -f /etc/redhat-release ]; then
