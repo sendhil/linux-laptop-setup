@@ -106,7 +106,7 @@ dnf install -y kitty
 dnf install -y postgresql
 
 ./i3-gaps.sh
-./polybar.sh
+dnf install -y polybar
 ./fpp.sh
 ./chrome.sh
 ./better-lock-screen.sh
