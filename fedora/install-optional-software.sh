@@ -26,6 +26,7 @@ echo "Installing Unclutter-XFixes"
 sudo dnf install -y ncmpcpp
 sudo dnf install -y redshift
 sudo dnf install -y pandoc
+sudo dnf install -y peek
 # sudo dnf install -y mongodb
 
 # Slack
