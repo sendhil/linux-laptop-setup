@@ -8,9 +8,6 @@ fi
 echo "Installing Simplenote"
 ./simplenote.sh
 
-echo "Installing DropBox"
-./dropbox.sh
-
 echo "Installing Bookmark Utility"
 go get -u github.com/sendhil/bookmarks/...  # My bookmark utility
 
@@ -40,10 +37,6 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 # Fira Code
 dnf copr enable evana/fira-code-fonts
 dnf install fira-code-fonts
-
-# Brave
-echo "Installing Brave"
-./brave.sh
 
 # Visual Studio Code
 if [ -f /etc/redhat-release ]; then

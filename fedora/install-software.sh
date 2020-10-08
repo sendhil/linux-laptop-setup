@@ -84,13 +84,6 @@ dnf install -y wireshark
 dnf install -y ngrep
 dnf install -y ctags
 
-# Docker
-
-dnf config-manager -y --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
-dnf install -y docker-ce docker-ce-cli containerd.io
-systemctl enable docker
-systemctl start docker
-
 # Disks
 dnf install -y lsscsi
 dnf install -y gparted
@@ -113,7 +106,7 @@ dnf install -y kitty
 dnf install -y postgresql
 
 ./i3-gaps.sh
-./polybar.sh
+dnf install -y polybar
 ./fpp.sh
 ./chrome.sh
 ./better-lock-screen.sh
