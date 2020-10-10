@@ -14,9 +14,12 @@ fi
 sudo -u $SUDO_USER bash << EOF
 # i3lock-color is required as a dependency
 cd ${USER_HOME}/src
-git clone https://github.com/sendhil/i3lock-color.git
+git clone https://github.com/Raymo111/i3lock-color
 cd i3lock-color
-autoreconf -i && ./configure && make
+chmod +x build.sh
+./build.sh
+chmod +x install-i3lock-color.sh
+./install-i3lock-color.sh
 EOF
 
 cd ${USER_HOME}/src/i3lock-color
