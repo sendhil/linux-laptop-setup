@@ -2,6 +2,7 @@
 
 # From https://stackoverflow.com/a/7359006
 USER_HOME=$(getent passwd $SUDO_USER | cut -d: -f6)
+SCRIPT_HOME=$(dir "$0")
 
 if [ "$EUID" -ne 0 ]
   then echo "Please run as root"
@@ -18,14 +19,14 @@ tar zxvf helm.tar.gz
 cp linux-amd64/helm ${USER_HOME}/.local/bin
 rm helm.tar.gz
 rm -rf linux-amd64
-${USER_HOME}/.local/bin helm repo add stable https://kubernetes-charts.storage.googleapis.com
+${USER_HOME}/.local/bin/helm repo add stable https://kubernetes-charts.storage.googleapis.com
 
 # Kubectl
 echo "Installing Kubectl"
-./kubectl.sh
+$SCRIPT_HOME/kubectl.sh
 
 # Install Minikube
-./minikube.sh
+$SCRIPT_HOME/minikube.sh
 
 echo "Installing kvm2 driver"
 curl -LO https://storage.googleapis.com/minikube/releases/latest/docker-machine-driver-kvm2 \
