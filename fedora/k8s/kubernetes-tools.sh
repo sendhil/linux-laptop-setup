@@ -22,10 +22,10 @@ ${USER_HOME}/.local/bin/helm repo add stable https://kubernetes-charts.storage.g
 
 # Kubectl
 echo "Installing Kubectl"
-./kubernetes/kubectl.sh
+./k8s/kubectl.sh
 
 # Install Minikube
-./kubernetes/minikube.sh
+./k8s/minikube.sh
 
 echo "Installing kvm2 driver"
 curl -LO https://storage.googleapis.com/minikube/releases/latest/docker-machine-driver-kvm2 \
