@@ -14,5 +14,5 @@ sudo -u $SUDO_USER bash << EOF
   cd ${USER_HOME}/.local
   git clone https://github.com/facebook/PathPicker.git
   cd PathPicker
-  ln -s "${USER_HOME}/.local/PathPicker/fpp" ~/.local/bin/fpp
+  ln -fs "${USER_HOME}/.local/PathPicker/fpp" ~/.local/bin/fpp || 1
 EOF
