@@ -1,9 +1,12 @@
 #!/bin/bash -e
 
-if [ "$EUID" -eq 0 ]
-  then echo "Please don't run as root"
+if [ "$EUID" -ne 0 ]
+  then echo "Please run as root"
   exit
 fi
+
+sudo -u $SUDO_USER bash << EOF
+EOF
 
 # Helm
 echo "Installing Helm"
@@ -16,7 +19,7 @@ helm repo add stable https://kubernetes-charts.storage.googleapis.com
 
 # Kubectl
 echo "Installing Kubectl"
-sudo ./kubectl.sh
+./kubectl.sh
 
 # Install Minikube
 ./minikube.sh

@@ -32,7 +32,6 @@ dnf install -y golang
 dnf install -y dep
 dnf install -y glide
 go get -u github.com/go-delve/delve/cmd/dlv
-./go-migrate.sh
 
 #NodeJS
 dnf install -y nodejs
@@ -105,11 +104,11 @@ dnf install -y kitty
 # Databases
 dnf install -y postgresql
 
-./i3-gaps.sh
+./other/i3-gaps.sh
 dnf install -y polybar
-./fpp.sh
-./chrome.sh
-./better-lock-screen.sh
+./other/fpp.sh
+./other/chrome.sh
+./other/better-lock-screen.sh
 
 # Zsh
 if [ ! -d ~/.oh-my-zsh ]; then
