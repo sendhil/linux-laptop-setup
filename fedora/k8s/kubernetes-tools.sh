@@ -1,5 +1,8 @@
 #!/bin/bash -e
 
+# From https://stackoverflow.com/a/7359006
+USER_HOME=$(getent passwd $SUDO_USER | cut -d: -f6)
+
 if [ "$EUID" -ne 0 ]
   then echo "Please run as root"
   exit
@@ -12,7 +15,7 @@ EOF
 echo "Installing Helm"
 curl -o helm.tar.gz https://get.helm.sh/helm-v3.0.0-rc.2-linux-amd64.tar.gz 
 tar zxvf helm.tar.gz
-cp linux-amd64/helm ~/.local/bin
+cp linux-amd64/helm ${USER_HOME}/.local/bin
 rm helm.tar.gz
 rm -rf linux-amd64
 helm repo add stable https://kubernetes-charts.storage.googleapis.com
@@ -32,7 +35,7 @@ curl -LO https://storage.googleapis.com/minikube/releases/latest/docker-machine-
 echo "Installing Kustomize"
 curl -Lo kustomize.tar.gz https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv3.4.0/kustomize_v3.4.0_linux_amd64.tar.gz 
 tar zxvf kustomize.tar.gz
-cp kustomize ~/.local/bin
+cp kustomize ${USER_HOME}/.local/bin
 rm kustomize.tar.gz
 rm kustomize
 
@@ -45,10 +48,10 @@ if [ ! -d /opt/kubectx ]; then
   sudo git clone https://github.com/ahmetb/kubectx /opt/kubectx
 fi
 
-sudo ln -s /opt/kubectx/kubectx ~/.local/bin/kubectx
-sudo ln -s /opt/kubectx/kubens ~/.local/bin/kubens
+sudo ln -s /opt/kubectx/kubectx ${USER_HOME}/.local/bin/kubectx
+sudo ln -s /opt/kubectx/kubens ${USER_HOME}/.local/bin/kubens
 
-mkdir -p ~/.oh-my-zsh/completions
-sudo ln -s /opt/kubectx/completion/kubectx.zsh ~/.oh-my-zsh/completions/_kubctx.zsh
-sudo ln -s /opt/kubectx/completion/kubens.zsh ~/.oh-my-zsh/completions/_kubens.zsh
-rm -f ~/.zcompdump;
+mkdir -p ${USER_HOME}/.oh-my-zsh/completions
+sudo ln -s /opt/kubectx/completion/kubectx.zsh ${USER_HOME}/.oh-my-zsh/completions/_kubctx.zsh
+sudo ln -s /opt/kubectx/completion/kubens.zsh ${USER_HOME}/.oh-my-zsh/completions/_kubens.zsh
+rm -f ${USER_HOME}/.zcompdump;

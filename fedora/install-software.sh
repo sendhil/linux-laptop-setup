@@ -1,11 +1,14 @@
 #!/bin/bash -e
 
+# From https://stackoverflow.com/a/7359006
+USER_HOME=$(getent passwd $SUDO_USER | cut -d: -f6)
+
 if [ "$EUID" -ne 0 ]
   then echo "Please run as root"
   exit
 fi
 
-mkdir -p ~/src
+mkdir -p ${USER_HOME}/src
 
 dnf -y install dnf-plugins-core
 
@@ -25,6 +28,7 @@ sudo -u $SUDO_USER bash << EOF
   pip install --user neovim
   pip3 install --user neovim
   pip3 install --user httplib2
+  pip3 install --user yq
 EOF
 
 #GoLang
@@ -45,7 +49,6 @@ dnf install -y feh
 dnf install -y rofi
 dnf install -y tmux
 dnf install -y jq
-pip3 install --user yq
 dnf install -y strace
 dnf install -y ltrace
 dnf install -y dstat
@@ -111,7 +114,7 @@ dnf install -y polybar
 ./other/better-lock-screen.sh
 
 # Zsh
-if [ ! -d ~/.oh-my-zsh ]; then
+if [ ! -d ${USER_HOME}/.oh-my-zsh ]; then
   echo "Installing zsh and oh-my-zsh"
   dnf install -y zsh
   sh -c "$(curl -fsSL https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
