@@ -19,15 +19,18 @@ sudo dnf install -y peek
 
 # Slack
 sudo dnf install -y flatpak
-flatpak install https://flathub.org/repo/appstream/com.slack.Slack.flatpakref
+flatpak install -y https://flathub.org/repo/appstream/com.slack.Slack.flatpakref
 
 # Rust
 echo "Installing rust"
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rust-install.sh
+chmod +x rust-install.sh
+./rust-install.sh -y
+rm ./rust-install.sh
 
 # Fira Code
-dnf copr enable evana/fira-code-fonts
-dnf install fira-code-fonts
+dnf copr enable -y evana/fira-code-fonts
+dnf install -y fira-code-fonts
 
 # Visual Studio Code
 rpm --import https://packages.microsoft.com/keys/microsoft.asc
@@ -35,6 +38,6 @@ sh -c 'echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.micros
 dnf check-update
 dnf install -y code
 
-dnf install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
-dnf install exfat-utils
-dnf install gstreamer1-libav
+dnf install -y https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
+dnf install -y exfat-utils
+dnf install -y gstreamer1-libav
