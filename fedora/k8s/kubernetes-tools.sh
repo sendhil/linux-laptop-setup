@@ -18,7 +18,7 @@ tar zxvf helm.tar.gz
 cp linux-amd64/helm ${USER_HOME}/.local/bin
 rm helm.tar.gz
 rm -rf linux-amd64
-helm repo add stable https://kubernetes-charts.storage.googleapis.com
+${USER_HOME}/.local/bin helm repo add stable https://kubernetes-charts.storage.googleapis.com
 
 # Kubectl
 echo "Installing Kubectl"
