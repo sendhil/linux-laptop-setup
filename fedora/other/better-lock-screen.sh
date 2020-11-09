@@ -11,7 +11,6 @@ else
   sudo apt-get install -y cairo-devel libev-devel libjpeg-devel libjpeg-turbo-devel libxcb-devel libxkbcommon-devel libxkbcommon-x11-devel pam-devel pkg-config xcb-util-devel xcb-util-image-devel
 fi
 
-sudo -u $SUDO_USER bash << EOF
 # i3lock-color is required as a dependency
 cd ${USER_HOME}/src
 git clone https://github.com/Raymo111/i3lock-color
@@ -20,10 +19,6 @@ chmod +x build.sh
 ./build.sh
 chmod +x install-i3lock-color.sh
 ./install-i3lock-color.sh
-EOF
-
-cd ${USER_HOME}/src/i3lock-color
-make install
 
 git clone https://github.com/sendhil/betterlockscreen
 cd betterlockscreen

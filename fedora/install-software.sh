@@ -107,7 +107,6 @@ dnf install -y kitty
 # Databases
 dnf install -y postgresql
 
-./other/i3-gaps.sh
 dnf install -y polybar
 ./other/fpp.sh
 ./other/chrome.sh
@@ -120,4 +119,4 @@ if [ ! -d ${USER_HOME}/.oh-my-zsh ]; then
   sh -c "$(curl -fsSL https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
 fi
 
-echo "Don't forget to install non-free software in 'install-non-free-software.sh'"
+./other/i3-gaps.sh
