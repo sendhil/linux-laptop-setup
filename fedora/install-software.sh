@@ -43,6 +43,7 @@ npm install -g typescript eslint neovim
 
 # Utilities
 dnf install -y ripgrep
+dnf install -y exa
 dnf install -y bat
 dnf install -y fd-find
 dnf install -y feh
@@ -116,7 +117,11 @@ dnf install -y polybar
 if [ ! -d ${USER_HOME}/.oh-my-zsh ]; then
   echo "Installing zsh and oh-my-zsh"
   dnf install -y zsh
+  # TODO: Remove Oh-My-Zsh
   sh -c "$(curl -fsSL https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+
+  # Install Prezto
+  git clone --recursive https://github.com/sorin-ionescu/prezto.git "${ZDOTDIR:-$HOME}/.zprezto"
 fi
 
 ./other/i3-gaps.sh
