@@ -13,7 +13,7 @@ mkdir -p ${USER_HOME}/src
 dnf -y install dnf-plugins-core
 
 # Cish Tools
-dnf install -y make	gcc-c++ clang cmake @development-tools cmake
+dnf install -y make	gcc-c++ clang cmake @development-tools cmake clang-tools-extra
 dnf install -y stow
 
 # Dev Env
@@ -37,9 +37,15 @@ dnf install -y dep
 dnf install -y glide
 go get -u github.com/go-delve/delve/cmd/dlv
 
+#Rust
+dnf install -y cargo
+cargo install rust-analyzer
+
 #NodeJS
 dnf install -y nodejs
 npm install -g typescript eslint neovim
+npm install -g typescript typescript-language-server
+npm install -g pyright
 
 # Utilities
 dnf install -y ripgrep
@@ -78,6 +84,7 @@ dnf install -y flameshot
 dnf install -y nethogs
 dnf install -y pavucontrol
 dnf install -y ImageMagick
+dnf install -y dmenu
  
 # Network
 dnf install -y iperf
@@ -125,3 +132,4 @@ if [ ! -d ${USER_HOME}/.oh-my-zsh ]; then
 fi
 
 ./other/i3-gaps.sh
+./other/albert.sh
