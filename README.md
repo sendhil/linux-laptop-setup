@@ -7,6 +7,11 @@ curl -s https://raw.githubusercontent.com/sendhil/linux-laptop-setup/master/init
 
 curl -s https://raw.githubusercontent.com/sendhil/linux-laptop-setup/master/init/ubuntu.sh | bash
 
+
+# Lima
+
+To skip the prompts to restart, make sure to run the command with NEEDRESTART_MODE=a, e.g. `sudo NEEDRESTART_MODE=a ./install-software.sh`
+
 # i3gaps
 
 There's a quirk where the script doesn't properly setup i3-gaps. After the script runs hop over the i3-gaps folder and re-run `sudo make install` and it should work. I'll eventually sort this out, but for now just going to leave this note.
