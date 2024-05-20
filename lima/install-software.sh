@@ -75,3 +75,8 @@ apt-get install -y net-tools
 # Zsh
 apt-get install -y zsh
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+
+# ZPrezto
+git clone https://github.com/sorin-ionescu/prezto.git ~/.zprezto
+cd ~/.zpresto
+git submodule update --init --recursive
