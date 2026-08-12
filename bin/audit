@@ -127,19 +127,15 @@ if [ -n "$npm_requirements" ]; then
 fi
 
 if [ -n "$uv_requirements" ]; then
-  if ! command -v uv >/dev/null 2>&1; then
-    append_value manager_errors 'uv: unavailable (required by non-empty manifest)'
+  uv_installed=$(uv_inventory)
+  inventory_status=$?
+  if [ "$inventory_status" -ne 0 ]; then
+    append_value manager_errors 'uv inventory failed'
   else
-    uv_installed=$(uv_inventory)
-    inventory_status=$?
-    if [ "$inventory_status" -ne 0 ]; then
-      append_value manager_errors 'uv inventory failed'
-    else
-      while IFS= read -r package; do
-        [ -n "$package" ] || continue
-        inventory_contains "$uv_installed" "$package" || append_value missing "uv $package"
-      done <<<"$uv_requirements"
-    fi
+    while IFS= read -r package; do
+      [ -n "$package" ] || continue
+      inventory_contains "$uv_installed" "$package" || append_value missing "uv $package"
+    done <<<"$uv_requirements"
   fi
 fi
 

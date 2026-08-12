@@ -43,10 +43,14 @@ npm_inventory() {
 }
 
 uv_inventory() {
-  output=$(UV_NO_CACHE=1 UV_NO_PROGRESS=1 uv tool list 2>/dev/null)
-  status=$?
-  [ "$status" -eq 0 ] || return 2
-  printf '%s\n' "$output" | sed -n '/^[^[:space:]-]/ { s/[[:space:]].*$//; p; }'
+  tool_dir=${UV_TOOL_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/uv/tools}
+  if [ ! -e "$tool_dir" ] && [ ! -L "$tool_dir" ]; then
+    return 0
+  fi
+  [ -d "$tool_dir" ] && [ -r "$tool_dir" ] || return 2
+  entries=$(find "$tool_dir" -mindepth 1 -maxdepth 1 -type d ! -name '.*' -exec basename {} \; 2>/dev/null) || return 2
+  [ -z "$entries" ] || printf '%s\n' "$entries" | \
+    sed -n '/^[a-z0-9][a-z0-9-]*$/ { /--/d; /-$/d; p; }' | LC_ALL=C sort -u
 }
 
 external_command_state() {

@@ -74,10 +74,10 @@ for malformed_npm_id in '--unsafe-option' '.' 'Foo' 'two words' 'name@1.0.0' '@s
   assert_status 2 validate_tool_id npm "$malformed_npm_id"
 done
 
-for uv_id in 'ruff' 'tool-name' 'tool.name' 'tool_name' 'tool2'; do
+for uv_id in 'ruff' 'tool-name' 'tool2' 'python-lsp-server'; do
   assert_status 0 validate_tool_id uv "$uv_id"
 done
-for malformed_uv_id in '--unsafe-option' '.' 'Ruff' 'two words' 'ruff@1.0' 'scope/ruff' './ruff' '../ruff' '/tmp/ruff' 'https://example.test/ruff' 'git+ssh://example.test/ruff'; do
+for malformed_uv_id in '--unsafe-option' '-' '.ruff' 'ruff.' 'tool.name' 'tool_name' 'two--words' 'two words' 'Ruff' 'ruff@1.0' 'scope/ruff' './ruff' '../ruff' '/tmp/ruff' 'https://example.test/ruff' 'git+ssh://example.test/ruff'; do
   assert_status 2 validate_tool_id uv "$malformed_uv_id"
 done
 

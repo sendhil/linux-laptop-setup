@@ -16,7 +16,8 @@ runtime_tmp="$tmp_dir/runtime-tmp"
 state_dir="$tmp_dir/state"
 call_log="$tmp_dir/calls.log"
 manager_log="$tmp_dir/manager-calls.log"
-mkdir -p "$test_repo" "$fake_bin" "$fake_home" "$npm_cache" "$runtime_tmp" "$state_dir"
+uv_tools="$tmp_dir/uv-tools"
+mkdir -p "$test_repo" "$fake_bin" "$fake_home" "$npm_cache" "$runtime_tmp" "$state_dir" "$uv_tools"
 cp -R "$repo_dir"/. "$test_repo"/
 
 cat >"$tmp_dir/os-release" <<'EOF'
@@ -39,9 +40,10 @@ printf 'this is intentionally invalid slack zoom\n' >"$test_repo/profiles/work.e
 
 printf 'bat\n' >"$state_dir/apt"
 : >"$state_dir/npm"
-: >"$state_dir/uv"
 : >"$call_log"
 : >"$manager_log"
+printf 'lock sentinel\n' >"$uv_tools/.lock"
+printf 'file sentinel\n' >"$uv_tools/file-only"
 
 cat >"$fake_bin/dpkg-query" <<'EOF'
 #!/bin/bash
@@ -142,11 +144,8 @@ case ${1:-} in
     case ${2:-} in
       list)
         printf 'uv <tool-list>\n' >>"$FAKE_MANAGER_LOG"
-        [ "${UV_NO_CACHE:-}" = 1 ] || exit 90
-        [ "${UV_NO_PROGRESS:-}" = 1 ] || exit 91
-        while IFS= read -r package; do
-          [ -n "$package" ] && printf '%s 1.0\n' "$package"
-        done <"$FAKE_STATE_DIR/uv"
+        printf 'uv lock mutation\n' >"$UV_TOOL_DIR/.lock"
+        exit 98
         ;;
       install)
         printf 'uv' >>"$FAKE_CALL_LOG"
@@ -154,7 +153,7 @@ case ${1:-} in
         printf '\n' >>"$FAKE_CALL_LOG"
         [ "${FAKE_UV_INSTALL_FAILURE:-0}" -eq 0 ] || exit 1
         package=${!#}
-        grep -Fx "$package" "$FAKE_STATE_DIR/uv" >/dev/null 2>&1 || printf '%s\n' "$package" >>"$FAKE_STATE_DIR/uv"
+        mkdir -p "$UV_TOOL_DIR/$package"
         ;;
       *) exit 64 ;;
     esac
@@ -175,6 +174,7 @@ run_apply() {
     PATH="$fake_bin:/usr/bin:/bin" \
     SETUP_OS_RELEASE="$tmp_dir/os-release" \
     SETUP_AUDIT_NPM_CACHE="$npm_cache" \
+    UV_TOOL_DIR="$uv_tools" \
     SETUP_SUDO_COMMAND="${SETUP_SUDO_COMMAND:-sudo}" \
     FAKE_STATE_DIR="$state_dir" \
     FAKE_CALL_LOG="$call_log" \
@@ -213,6 +213,14 @@ assert_contains "$calls" 'uv <tool> <install> <ruff>' 'missing uv tool is instal
 run_apply
 assert_eq 0 "$apply_status" 'a completed apply is safely resumable'
 assert_no_mutation 'a completed rerun skips every manager mutation'
+case $(cat "$manager_log") in *'uv <tool-list>'*) fail 'apply inventory must not invoke uv tool list' ;; esac
+
+home_before=$(find "$fake_home" -print -exec shasum {} \; 2>/dev/null | LC_ALL=C sort)
+uv_before=$(find "$uv_tools" -print -exec shasum {} \; 2>/dev/null | LC_ALL=C sort)
+run_apply
+assert_eq 0 "$apply_status" 'satisfied filesystem uv inventory remains converged'
+assert_eq "$home_before" "$(find "$fake_home" -print -exec shasum {} \; 2>/dev/null | LC_ALL=C sort)" 'apply inventory leaves home unchanged'
+assert_eq "$uv_before" "$(find "$uv_tools" -print -exec shasum {} \; 2>/dev/null | LC_ALL=C sort)" 'apply inventory leaves uv tools, files, and lock state unchanged'
 
 # Every preflight failure below must happen before the first mutation.
 printf 'bat\n' >"$test_repo/profiles/work.apt.txt"
@@ -245,6 +253,12 @@ assert_eq 2 "$apply_status" 'a needed unavailable manager is invalid configurati
 assert_no_mutation 'unavailable manager is rejected before mutation'
 mv "$fake_bin/npm.saved" "$fake_bin/npm"
 
+mv "$fake_bin/uv" "$fake_bin/uv.saved"
+run_apply
+assert_eq 2 "$apply_status" 'apply still requires uv for a non-empty manifest'
+assert_no_mutation 'unavailable uv installer is rejected before mutation'
+mv "$fake_bin/uv.saved" "$fake_bin/uv"
+
 printf 'bat\n' >"$state_dir/apt"
 FAKE_NEOVIM_CANDIDATE=0.8.4 run_apply
 assert_eq 2 "$apply_status" 'candidate below a declared floor is rejected'
@@ -261,7 +275,7 @@ assert_no_mutation 'unavailable sudo is rejected before mutation'
 # Mutation failures are status 1; already-completed work remains installed for rerun.
 printf 'bat\n' >"$state_dir/apt"
 : >"$state_dir/npm"
-: >"$state_dir/uv"
+rmdir "$uv_tools/ruff"
 FAKE_NPM_INSTALL_FAILURE=1 run_apply
 assert_eq 1 "$apply_status" 'manager install failure exits with status 1'
 assert_contains "$apply_output" 'failed to install npm tool: prettier' 'failed item is reported'

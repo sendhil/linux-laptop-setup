@@ -85,7 +85,7 @@ validate_tool_id() {
         [[ $id =~ ^@[a-z0-9]([a-z0-9._-]*[a-z0-9])?/[a-z0-9]([a-z0-9._-]*[a-z0-9])?$ ]] || return 2
       ;;
     uv)
-      [[ $id =~ ^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$ ]] || return 2
+      [[ $id =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || return 2
       ;;
     command)
       case $id in

@@ -13,11 +13,14 @@ fake_bin="$tmp_dir/fake-bin"
 fake_home="$tmp_dir/home"
 npm_cache="$tmp_dir/npm-cache"
 runtime_tmp="$tmp_dir/runtime-tmp"
-mkdir -p "$test_repo" "$fake_bin" "$fake_home" "$npm_cache" "$runtime_tmp"
+uv_tools="$tmp_dir/uv-tools"
+mkdir -p "$test_repo" "$fake_bin" "$fake_home" "$npm_cache" "$runtime_tmp" "$uv_tools/ruff"
 cp -R "$repo_dir"/. "$test_repo"/
 printf 'home sentinel\n' >"$fake_home/sentinel"
 printf 'cache sentinel\n' >"$npm_cache/sentinel"
 printf 'temporary sentinel\n' >"$runtime_tmp/sentinel"
+printf 'lock sentinel\n' >"$uv_tools/.lock"
+printf 'file sentinel\n' >"$uv_tools/file-only"
 
 cat >"$tmp_dir/os-release" <<'EOF'
 ID=ubuntu
@@ -77,7 +80,7 @@ chmod +x "$fake_bin/dpkg-query" "$fake_bin/dpkg" "$fake_bin/apt-cache"
 
 checksum_tree() {
   directory=$1
-  find "$directory" -type f -exec shasum {} \; | LC_ALL=C sort | shasum | awk '{print $1}'
+  find "$directory" -print -exec shasum {} \; 2>/dev/null | LC_ALL=C sort | shasum | awk '{print $1}'
 }
 
 run_audit() {
@@ -88,6 +91,7 @@ run_audit() {
     PATH="$fake_bin:/usr/bin:/bin" \
     SETUP_OS_RELEASE="$tmp_dir/os-release" \
     SETUP_AUDIT_NPM_CACHE="$npm_cache" \
+    UV_TOOL_DIR="$uv_tools" \
     SETUP_READ_LINES_COMMAND="${SETUP_READ_LINES_COMMAND:-}" \
     FAKE_MISSING_APT="${FAKE_MISSING_APT:-}" \
     FAKE_NEOVIM_VERSION="${FAKE_NEOVIM_VERSION:-}" \
@@ -183,10 +187,28 @@ assert_contains "$audit_output" 'npm inventory failed' 'npm inventory failure is
 rm "$fake_bin/npm"
 printf '# Intentionally empty.\n' >"$test_repo/manifests/npm.txt"
 
+cat >"$fake_bin/uv" <<'EOF'
+#!/bin/bash
+printf 'uv was invoked\n' >"$HOME/uv-invoked"
+printf 'uv lock mutation\n' >"$UV_TOOL_DIR/.lock"
+exit 2
+EOF
+chmod +x "$fake_bin/uv"
 printf 'ruff\n' >"$test_repo/manifests/uv-tools.txt"
+home_before=$(checksum_tree "$fake_home")
+uv_before=$(checksum_tree "$uv_tools")
 run_audit
-assert_eq 2 "$audit_status" 'a needed unavailable uv manager is a configuration error'
-assert_contains "$audit_output" 'uv: unavailable' 'missing needed uv is reported as a manager error'
+assert_eq 0 "$audit_status" 'filesystem inventory satisfies a declared uv tool'
+assert_contains "$audit_output" $'Missing\n  (none)' 'uv directory inventory converges with the normalized manifest ID'
+assert_eq "$home_before" "$(checksum_tree "$fake_home")" 'uv audit inventory leaves home unchanged'
+assert_eq "$uv_before" "$(checksum_tree "$uv_tools")" 'uv audit inventory leaves tool files and lock state unchanged'
+[ ! -e "$fake_home/uv-invoked" ] || fail 'audit uv inventory never invokes the uv executable'
+rm "$fake_bin/uv"
+
+printf 'file-only\n' >"$test_repo/manifests/uv-tools.txt"
+run_audit
+assert_eq 1 "$audit_status" 'a regular file is not a uv tool inventory entry'
+assert_contains "$audit_output" 'uv file-only' 'audit reports a file-only uv ID as missing'
 printf '# Intentionally empty.\n' >"$test_repo/manifests/uv-tools.txt"
 
 FAKE_DPKG_FAILURE=bat run_audit
