@@ -23,6 +23,8 @@ Choose Sway from GDM's session menu, then verify:
   workspace 1–20 bindings behave as documented by the dotfiles repository.
 - [ ] Built-in and attached displays use the expected resolution, scale,
   position, refresh rate, and lid behavior.
+- [ ] Verify brightness/backlight controls and laptop brightness keys change the
+  built-in display smoothly across a usable range.
 - [ ] Waybar shows workspaces and useful laptop status without errors.
 - [ ] Mako displays and dismisses test notifications.
 - [ ] Copy and paste work between native Wayland applications, terminal

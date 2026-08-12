@@ -23,6 +23,7 @@ done
 checklist=$(cat docs/first-sway-login.md)
 for required_text in \
   'proprietary NVIDIA' \
+  'brightness/backlight' \
   'Slack' \
   'Zoom' \
   'screen sharing' \
@@ -31,7 +32,7 @@ for required_text in \
   assert_contains "$checklist" "$required_text" "first-login checklist covers $required_text"
 done
 
-[ ! -e ubuntu ] || fail 'tracked legacy ubuntu directory is retired'
+[ -z "$(git ls-files -- ubuntu)" ] || fail 'tracked legacy ubuntu directory is retired'
 
 supported_docs=$(printf '%s\n%s\n' "$readme" "$checklist")
 if printf '%s\n' "$supported_docs" | grep -Eiq \
