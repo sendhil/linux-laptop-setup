@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [ "$#" -ne 0 ]; then
+  printf 'usage: %s\n' "$0" >&2
+  exit 2
+fi
+
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
 cd "$repo_dir" || exit 2
@@ -52,10 +57,7 @@ fi
 
 command -v apt-get >/dev/null 2>&1 || \
   configuration_error 'APT is unavailable: apt-get'
-sudo_command=${SETUP_SUDO_COMMAND:-sudo}
-validate_tool_id command "$sudo_command" || \
-  configuration_error "invalid privilege command: $sudo_command"
-if ! command -v "$sudo_command" >/dev/null 2>&1; then
+if ! command -v sudo >/dev/null 2>&1 || ! sudo -n true; then
   manual_packages=$(printf '%s\n' "$missing" | paste -sd ' ' -)
   printf 'error: sudo is required to install missing bootstrap prerequisites\n' >&2
   printf 'manual command: sudo apt-get update && sudo apt-get install -y --no-install-recommends -- %s\n' \
@@ -65,10 +67,10 @@ fi
 
 # Every platform, inventory, package-manager, and privilege check completes before
 # the first package-manager mutation below.
-"$sudo_command" apt-get update || install_error 'APT metadata'
+sudo apt-get update || install_error 'APT metadata'
 while IFS= read -r package; do
   [ -n "$package" ] || continue
-  "$sudo_command" apt-get install -y --no-install-recommends -- "$package" || \
+  sudo apt-get install -y --no-install-recommends -- "$package" || \
     install_error "$package"
 done <<<"$missing"
 

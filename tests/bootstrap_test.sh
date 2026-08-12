@@ -10,10 +10,15 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 test_repo="$tmp_dir/repository"
 fake_bin="$tmp_dir/fake-bin"
+safe_bin="$tmp_dir/safe-bin"
 state_dir="$tmp_dir/state"
 call_log="$tmp_dir/calls.log"
-mkdir -p "$test_repo" "$fake_bin" "$state_dir"
+mkdir -p "$test_repo" "$fake_bin" "$safe_bin" "$state_dir"
 cp -R "$repo_dir"/. "$test_repo"/
+
+for command_name in awk dirname grep paste sed; do
+  ln -s "$(command -v "$command_name")" "$safe_bin/$command_name"
+done
 
 ubuntu_release="$tmp_dir/ubuntu-os-release"
 cat >"$ubuntu_release" <<'EOF'
@@ -58,6 +63,11 @@ cat >"$fake_bin/sudo" <<'EOF'
 printf 'sudo' >>"$FAKE_CALL_LOG"
 printf ' <%s>' "$@" >>"$FAKE_CALL_LOG"
 printf '\n' >>"$FAKE_CALL_LOG"
+if [ "${1:-}" = -n ] && [ "${2:-}" = true ] && [ "$#" -eq 2 ]; then
+  [ "${FAKE_SUDO_MODE:-allowed}" = allowed ]
+  exit $?
+fi
+[ "${FAKE_SUDO_MODE:-allowed}" = allowed ] || exit 1
 exec "$@"
 EOF
 
@@ -96,13 +106,14 @@ run_bootstrap() {
   : >"$call_log"
   set +e
   bootstrap_output=$(cd "$test_repo" && env \
-    PATH="$fake_bin:/usr/bin:/bin" \
+    PATH="${BOOTSTRAP_PATH:-$fake_bin:/usr/bin:/bin}" \
     SETUP_OS_RELEASE="${SETUP_OS_RELEASE:-$ubuntu_release}" \
-    SETUP_SUDO_COMMAND="${SETUP_SUDO_COMMAND:-sudo}" \
+    SETUP_SUDO_COMMAND="${SETUP_SUDO_COMMAND:-}" \
     FAKE_STATE_DIR="$state_dir" \
     FAKE_CALL_LOG="$call_log" \
     FAKE_DPKG_FAILURE="${FAKE_DPKG_FAILURE:-}" \
-    bash bin/bootstrap 2>&1)
+    FAKE_SUDO_MODE="${FAKE_SUDO_MODE:-allowed}" \
+    /bin/bash bin/bootstrap 2>&1)
   bootstrap_status=$?
   set -e
 }
@@ -111,6 +122,35 @@ assert_no_mutation() {
   [ ! -s "$call_log" ] || \
     fail "$1 (unexpected calls: $(tr '\n' ' ' <"$call_log"))"
 }
+
+assert_no_apt_call() {
+  case $(cat "$call_log") in
+    *apt-get*) fail "$1 (unexpected calls: $(tr '\n' ' ' <"$call_log"))" ;;
+  esac
+}
+
+run_invalid_bootstrap_arg() {
+  : >"$call_log"
+  set +e
+  bootstrap_output=$(cd "$test_repo" && env \
+    PATH="$fake_bin:/usr/bin:/bin" \
+    SETUP_OS_RELEASE="$tmp_dir/does-not-exist" \
+    FAKE_STATE_DIR="$state_dir" \
+    FAKE_CALL_LOG="$call_log" \
+    /bin/bash bin/bootstrap unexpected 2>&1)
+  bootstrap_status=$?
+  set -e
+}
+
+run_invalid_bootstrap_arg
+assert_eq 2 "$bootstrap_status" 'bootstrap accepts exactly zero arguments'
+assert_contains "$bootstrap_output" 'usage: bin/bootstrap' 'invalid bootstrap arguments print usage'
+case $bootstrap_output in
+  *platform*|*Ubuntu*|*Architecture*|*Graphics*)
+    fail 'argument validation runs after platform detection'
+    ;;
+esac
+assert_no_mutation 'invalid arguments are rejected before inventory or mutation'
 
 printf 'ca-certificates\ngit\n' >"$state_dir/apt"
 run_bootstrap
@@ -124,6 +164,8 @@ assert_no_mutation 'satisfied prerequisites do not require sudo or APT'
 printf 'git\n' >"$state_dir/apt"
 run_bootstrap
 assert_eq 0 "$bootstrap_status" 'one missing prerequisite is installed'
+assert_contains "$(cat "$call_log")" 'sudo <-n> <true>' \
+  'bootstrap preflights sudo authorization noninteractively'
 assert_eq 1 "$(grep -c '^apt-get <update>$' "$call_log")" 'APT metadata updates once when a prerequisite is missing'
 assert_contains "$(cat "$call_log")" \
   'apt-get <install> <-y> <--no-install-recommends> <--> <ca-certificates>' \
@@ -150,12 +192,32 @@ case $(cat "$call_log") in
 esac
 
 : >"$state_dir/apt"
-SETUP_SUDO_COMMAND=unavailable-sudo run_bootstrap
-assert_eq 2 "$bootstrap_status" 'missing privilege is an actionable prerequisite error'
+FAKE_SUDO_MODE=denied run_bootstrap
+assert_eq 2 "$bootstrap_status" 'denied noninteractive sudo is an actionable prerequisite error'
 assert_contains "$bootstrap_output" \
   'manual command: sudo apt-get update && sudo apt-get install -y --no-install-recommends -- ca-certificates git' \
-  'missing privilege prints the exact manual bootstrap command'
-assert_no_mutation 'missing privilege is detected before APT metadata mutation'
+  'denied privilege prints the exact manual bootstrap command'
+assert_no_apt_call 'denied privilege is detected before APT metadata mutation'
+
+: >"$state_dir/apt"
+SETUP_SUDO_COMMAND=true FAKE_SUDO_MODE=denied run_bootstrap
+assert_eq 2 "$bootstrap_status" 'a true override cannot bypass denied sudo authorization'
+assert_no_apt_call 'a true override cannot reach APT without sudo authorization'
+
+: >"$state_dir/apt"
+SETUP_SUDO_COMMAND=env FAKE_SUDO_MODE=denied run_bootstrap
+assert_eq 2 "$bootstrap_status" 'an env override cannot bypass denied sudo authorization'
+assert_no_apt_call 'an env override cannot reach APT without sudo authorization'
+
+: >"$state_dir/apt"
+mv "$fake_bin/sudo" "$fake_bin/sudo.saved"
+BOOTSTRAP_PATH="$fake_bin:$safe_bin" run_bootstrap
+assert_eq 2 "$bootstrap_status" 'absent sudo is an actionable prerequisite error'
+assert_contains "$bootstrap_output" \
+  'manual command: sudo apt-get update && sudo apt-get install -y --no-install-recommends -- ca-certificates git' \
+  'absent sudo prints the exact manual bootstrap command'
+assert_no_apt_call 'absent sudo is detected before APT metadata mutation'
+mv "$fake_bin/sudo.saved" "$fake_bin/sudo"
 
 : >"$state_dir/apt"
 mv "$fake_bin/apt-get" "$fake_bin/apt-get.saved"
@@ -183,7 +245,7 @@ wrapper_output=$(cd "$test_repo" && env \
   SETUP_OS_RELEASE="$ubuntu_release" \
   FAKE_STATE_DIR="$state_dir" \
   FAKE_CALL_LOG="$call_log" \
-  bash init/ubuntu.sh 2>&1)
+  /bin/bash init/ubuntu.sh 2>&1)
 wrapper_status=$?
 set -e
 assert_eq 0 "$wrapper_status" 'the legacy local initializer delegates to bootstrap'
@@ -191,5 +253,19 @@ assert_contains "$wrapper_output" \
   'init/ubuntu.sh is deprecated; delegating to bin/bootstrap' \
   'the legacy local initializer explains its deprecation'
 assert_no_mutation 'the local initializer performs no legacy clone or update action'
+
+: >"$call_log"
+set +e
+wrapper_output=$(cd "$test_repo" && env \
+  PATH="$fake_bin:/usr/bin:/bin" \
+  SETUP_OS_RELEASE="$tmp_dir/does-not-exist" \
+  FAKE_STATE_DIR="$state_dir" \
+  FAKE_CALL_LOG="$call_log" \
+  /bin/bash init/ubuntu.sh unexpected 2>&1)
+wrapper_status=$?
+set -e
+assert_eq 2 "$wrapper_status" 'the local initializer forwards invalid arguments to bootstrap'
+assert_contains "$wrapper_output" 'usage:' 'forwarded invalid arguments print bootstrap usage'
+assert_no_apt_call 'forwarded invalid arguments are rejected before APT mutation'
 
 printf 'ok - bootstrap is minimal, preflighted, additive, and local\n'
