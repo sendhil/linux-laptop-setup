@@ -19,6 +19,31 @@ mkdir -p "$test_repo" "$fake_bin" "$proc_root/123" "$empty_proc_root" "$runtime_
 cp -R "$repo_dir"/. "$test_repo"/
 printf 'runtime sentinel\n' >"$runtime_tmp/sentinel"
 
+cat >"$tmp_dir/run-with-deadline.py" <<'EOF'
+import os
+import signal
+import subprocess
+import sys
+
+deadline = float(sys.argv[1])
+process = subprocess.Popen(
+    sys.argv[2:],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    text=True,
+    start_new_session=True,
+)
+try:
+    output, _ = process.communicate(timeout=deadline)
+except subprocess.TimeoutExpired:
+    os.killpg(process.pid, signal.SIGKILL)
+    output, _ = process.communicate()
+    sys.stdout.write(output)
+    sys.exit(98)
+sys.stdout.write(output)
+sys.exit(process.returncode)
+EOF
+
 cat >"$policy_agent" <<'EOF'
 #!/bin/bash
 printf 'policy-agent' >>"$FAKE_CALL_LOG"
@@ -47,6 +72,10 @@ printf ' <%s>' "$@" >>"$FAKE_CALL_LOG"
 printf '\n' >>"$FAKE_CALL_LOG"
 case ${0##*/} in
   zsh)
+    if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
+      trap '' TERM
+      while :; do :; done
+    fi
     if [ "${FAKE_ZSH_LARGE_OUTPUT:-0}" -eq 1 ]; then
       line_number=1
       while [ "$line_number" -le 20000 ]; do
@@ -81,12 +110,29 @@ cat >"$fake_bin/timeout" <<'EOF'
 printf 'timeout' >>"$FAKE_CALL_LOG"
 printf ' <%s>' "$@" >>"$FAKE_CALL_LOG"
 printf '\n' >>"$FAKE_CALL_LOG"
+[ "${1:-}" = -k ] || exit 64
+[ "${2:-}" = 2 ] || exit 64
+shift 2
 duration=${1:-}
 shift
 case $duration:${1:-} in
+  10:zsh)
+    if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
+      "$@" &
+      child=$!
+      sleep 0.1
+      kill -TERM "$child" 2>/dev/null || :
+      sleep 0.1
+      kill -0 "$child" 2>/dev/null || exit 65
+      kill -KILL "$child" 2>/dev/null || :
+      wait "$child" 2>/dev/null
+      exit 137
+    fi
+    ;;
   10:*) : ;;
   5:nvidia-smi)
     [ "${FAKE_NVIDIA_TIMEOUT:-0}" -eq 0 ] || exit 124
+    [ "${FAKE_NVIDIA_HARD_TIMEOUT:-0}" -eq 0 ] || exit 137
     ;;
   *) exit 64 ;;
 esac
@@ -145,6 +191,11 @@ chmod +x "$fake_bin"/*
 
 run_doctor() {
   : >"$call_log"
+  doctor_runner=(/bin/bash bin/doctor "${DOCTOR_PROFILE:-work}")
+  if [ -n "${DOCTOR_OUTER_DEADLINE:-}" ]; then
+    doctor_runner=(/usr/bin/python3 "$tmp_dir/run-with-deadline.py" \
+      "$DOCTOR_OUTER_DEADLINE" "${doctor_runner[@]}")
+  fi
   set +e
   doctor_output=$(cd "$test_repo" && env \
     PATH="$fake_bin:/usr/bin:/bin" \
@@ -157,12 +208,14 @@ run_doctor() {
     FAKE_CALL_LOG="$call_log" \
     FAKE_INACTIVE_SERVICE="${FAKE_INACTIVE_SERVICE:-}" \
     FAKE_LSMOD_OUTPUT="${FAKE_LSMOD_OUTPUT:-}" \
+    FAKE_NVIDIA_HARD_TIMEOUT="${FAKE_NVIDIA_HARD_TIMEOUT:-0}" \
     FAKE_NVIDIA_STATUS="${FAKE_NVIDIA_STATUS:-0}" \
     FAKE_NVIDIA_TIMEOUT="${FAKE_NVIDIA_TIMEOUT:-0}" \
     FAKE_ZSH_LARGE_OUTPUT="${FAKE_ZSH_LARGE_OUTPUT:-0}" \
+    FAKE_ZSH_IGNORE_TERM="${FAKE_ZSH_IGNORE_TERM:-0}" \
     FAKE_ZSH_OUTPUT="${FAKE_ZSH_OUTPUT:-}" \
     FAKE_ZSH_STATUS="${FAKE_ZSH_STATUS:-0}" \
-    /bin/bash bin/doctor "${DOCTOR_PROFILE:-work}" 2>&1)
+    "${doctor_runner[@]}" 2>&1)
   doctor_status=$?
   set -e
 }
@@ -210,8 +263,8 @@ assert_contains "$doctor_output" 'PASS shell startup: bash' 'Bash startup is che
 assert_contains "$doctor_output" 'PASS shell startup: zsh' 'Zsh startup is checked'
 assert_contains "$doctor_output" 'Summary: PASS ' 'doctor prints result accounting'
 assert_contains "$doctor_output" ' WARN 1 SKIP 1 FAIL 0' 'warnings and skips do not count as failures'
-assert_contains "$(cat "$call_log")" 'timeout <10> <bash> <-lic> <exit>' 'Bash startup is bounded to ten seconds'
-assert_contains "$(cat "$call_log")" 'timeout <10> <zsh> <-lic> <exit>' 'Zsh startup is bounded to ten seconds'
+assert_contains "$(cat "$call_log")" 'timeout <-k> <2> <10> <bash> <-lic> <exit>' 'Bash startup has a two-second hard-kill grace period'
+assert_contains "$(cat "$call_log")" 'timeout <-k> <2> <10> <zsh> <-lic> <exit>' 'Zsh startup has a two-second hard-kill grace period'
 case $(cat "$call_log") in
   *systemctl*|*readlink*) fail 'non-Sway sessions do not query user services or the policy agent' ;;
 esac
@@ -259,6 +312,13 @@ assert_contains "$doctor_output" 'FAIL shell startup: zsh (timed out after 10s)'
 case $doctor_output in
   *'partial output'*) fail 'timeout output does not obscure the bounded-time diagnosis' ;;
 esac
+
+DOCTOR_OUTER_DEADLINE=3 FAKE_ZSH_IGNORE_TERM=1 run_doctor
+if [ "$doctor_status" -eq 98 ]; then
+  fail 'the independent outer safety deadline killed the doctor'
+fi
+assert_eq 1 "$doctor_status" 'a TERM-ignoring shell is hard-killed before the outer deadline'
+assert_contains "$doctor_output" 'FAIL shell startup: zsh (timed out after 10s)' 'status 137 is reported as a shell timeout'
 
 runtime_before=$(find "$runtime_tmp" -type f -print | LC_ALL=C sort)
 FAKE_ZSH_STATUS=7 FAKE_ZSH_LARGE_OUTPUT=1 run_doctor
@@ -350,7 +410,7 @@ chmod +x "$fake_bin/nvidia-smi"
 run_doctor
 assert_eq 0 "$doctor_status" 'proprietary NVIDIA detection remains warning-only'
 assert_contains "$doctor_output" 'WARN PROPRIETARY NVIDIA DRIVER DETECTED' 'successful nvidia-smi detection is prominent'
-assert_contains "$(cat "$call_log")" 'timeout <5> <nvidia-smi>' 'nvidia-smi is bounded to five seconds'
+assert_contains "$(cat "$call_log")" 'timeout <-k> <2> <5> <nvidia-smi>' 'nvidia-smi has a two-second hard-kill grace period'
 
 FAKE_NVIDIA_STATUS=9 run_doctor
 assert_eq 0 "$doctor_status" 'an unusable nvidia-smi command does not fail the doctor'
@@ -364,6 +424,13 @@ case $doctor_output in
   *'PROPRIETARY NVIDIA DRIVER DETECTED'*) fail 'a timed-out nvidia-smi probe falls back without becoming evidence itself' ;;
 esac
 assert_contains "$(cat "$call_log")" 'lsmod' 'a timed-out nvidia-smi probe falls back to loaded modules'
+
+FAKE_NVIDIA_HARD_TIMEOUT=1 run_doctor
+assert_eq 0 "$doctor_status" 'a hard-killed nvidia-smi probe does not fail the doctor'
+case $doctor_output in
+  *'PROPRIETARY NVIDIA DRIVER DETECTED'*) fail 'a hard-killed nvidia-smi probe falls back without becoming evidence itself' ;;
+esac
+assert_contains "$(cat "$call_log")" 'lsmod' 'status 137 from nvidia-smi falls back to loaded modules'
 
 FAKE_NVIDIA_STATUS=9 FAKE_LSMOD_OUTPUT=$'Module Size Used by\nnvidia_drm 123 0' run_doctor
 assert_eq 0 "$doctor_status" 'a loaded proprietary NVIDIA module remains warning-only'
