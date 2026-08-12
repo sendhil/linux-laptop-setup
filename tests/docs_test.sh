@@ -65,6 +65,22 @@ printf '<%s>\n' "$@" >"$DOCKER_LOG"
 EOF
 chmod +x "$fake_bin/docker"
 
+set +e
+smoke_invalid_output=$(DOCKER_LOG="$docker_log" PATH="$fake_bin:$safe_bin" \
+  /bin/bash tests/container-smoke.sh --privileged 2>&1)
+smoke_invalid_status=$?
+set -e
+assert_eq 2 "$smoke_invalid_status" 'container smoke rejects an option-like image'
+assert_contains "$smoke_invalid_output" 'usage:' 'invalid image prints container smoke usage'
+
+set +e
+smoke_invalid_output=$(DOCKER_LOG="$docker_log" PATH="$fake_bin:$safe_bin" \
+  /bin/bash tests/container-smoke.sh ubuntu:24.04 extra 2>&1)
+smoke_invalid_status=$?
+set -e
+assert_eq 2 "$smoke_invalid_status" 'container smoke accepts at most one image argument'
+assert_contains "$smoke_invalid_output" 'usage:' 'extra arguments print container smoke usage'
+
 DOCKER_LOG="$docker_log" PATH="$fake_bin:$safe_bin" \
   /bin/bash tests/container-smoke.sh example.invalid/ubuntu:test
 smoke_call=$(cat "$docker_log")
@@ -75,11 +91,20 @@ assert_contains "$smoke_call" '<-w>' 'container smoke selects a container workin
 assert_contains "$smoke_call" '</repo>' 'container smoke works from the mounted repository'
 assert_contains "$smoke_call" '<example.invalid/ubuntu:test>' 'container smoke accepts an optional image'
 assert_contains "$smoke_call" 'bash tests/run' 'container smoke runs the repository test suite'
-assert_contains "$smoke_call" 'git grep sed' 'container smoke installs the test-suite prerequisites'
+assert_contains "$smoke_call" \
+  'apt-get install -y bash coreutils findutils git grep libdigest-sha-perl python3 sed' \
+  'container smoke installs the complete test-suite prerequisites'
+assert_contains "$smoke_call" 'GIT_CONFIG_COUNT=1' \
+  'container smoke scopes a Git configuration entry to the container process'
+assert_contains "$smoke_call" 'GIT_CONFIG_KEY_0=safe.directory' \
+  'container smoke declares the Git safe-directory key without writing config'
+assert_contains "$smoke_call" 'GIT_CONFIG_VALUE_0=/repo' \
+  'container smoke marks only the mounted repository safe'
 assert_contains "$smoke_call" 'bash -n bin/bootstrap bin/audit bin/apply bin/doctor' \
   'container smoke checks supported command syntax'
 case $smoke_call in
   *'bin/apply work'*) fail 'container smoke applies laptop state' ;;
+  *'git config --global'*) fail 'container smoke writes global Git configuration' ;;
   *'install docker'*|*'docker install'*|*systemctl*|*service*)
     fail 'container smoke installs or starts Docker'
     ;;

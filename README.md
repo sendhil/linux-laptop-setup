@@ -119,11 +119,14 @@ tests/container-smoke.sh
 ```
 
 Pass an image name to override the default `ubuntu:24.04`, for example
-`tests/container-smoke.sh ubuntu:26.04`. The harness mounts this repository
+`tests/container-smoke.sh ubuntu:26.04`. Image references must begin with an
+ASCII letter or digit and contain only letters, digits, `.`, `_`, `/`, `:`,
+`@`, or `-`; option-like input is rejected. The harness mounts this repository
 read-only, runs the host-independent test suite, and checks the supported
-command scripts for Bash syntax. This setup does not install or start Docker.
-If Docker is unavailable, skip the container smoke test; do not install or
-start a workplace-managed runtime for this repository.
+command scripts for Bash syntax. Any Git safe-directory override exists only
+in the disposable container process. This setup does not install or start Docker.
+If Docker is unavailable, skip the container smoke test; do not
+install or start a workplace-managed runtime for this repository.
 
 ## Recovery
 
