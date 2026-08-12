@@ -1,0 +1,22 @@
+# Shared command-line and development packages.
+bash-completion
+bat
+build-essential
+ca-certificates
+curl
+direnv
+fd-find
+fzf
+git
+jq
+kitty
+neovim 0.9.0
+pipx
+python3
+ripgrep
+shellcheck
+stow
+tmux
+tree
+zoxide
+zsh

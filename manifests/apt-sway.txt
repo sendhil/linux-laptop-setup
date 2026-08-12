@@ -1,0 +1,23 @@
+# Sway session and laptop desktop integration packages.
+blueman
+brightnessctl
+dbus-user-session
+fuzzel
+grim
+libnotify-bin
+mako-notifier
+network-manager-gnome
+pipewire
+playerctl
+policykit-1-gnome
+slurp
+sway
+swayidle
+swaylock
+waybar
+wireplumber
+wl-clipboard
+xdg-desktop-portal
+xdg-desktop-portal-gtk
+xdg-desktop-portal-wlr
+xwayland

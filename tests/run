@@ -1,0 +1,8 @@
+#!/bin/bash
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+for test_file in "$script_dir"/*_test.sh; do
+  bash "$test_file"
+done

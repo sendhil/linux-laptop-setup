@@ -1,0 +1,5 @@
+# Workplace/IT-owned commands checked diagnostically but never installed.
+command docker
+command kubectl
+command slack
+command zoom
