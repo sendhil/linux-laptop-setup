@@ -12,8 +12,12 @@ test_repo="$tmp_dir/repository"
 fake_bin="$tmp_dir/fake-bin"
 call_log="$tmp_dir/calls.log"
 policy_agent="$tmp_dir/policy-agent"
-mkdir -p "$test_repo" "$fake_bin"
+proc_root="$tmp_dir/proc"
+empty_proc_root="$tmp_dir/empty-proc"
+runtime_tmp="$tmp_dir/runtime-tmp"
+mkdir -p "$test_repo" "$fake_bin" "$proc_root/123" "$empty_proc_root" "$runtime_tmp"
 cp -R "$repo_dir"/. "$test_repo"/
+printf 'runtime sentinel\n' >"$runtime_tmp/sentinel"
 
 cat >"$policy_agent" <<'EOF'
 #!/bin/bash
@@ -23,6 +27,7 @@ printf '\n' >>"$FAKE_CALL_LOG"
 exit 97
 EOF
 chmod +x "$policy_agent"
+ln -s "$policy_agent" "$proc_root/123/exe"
 
 cat >"$tmp_dir/os-release" <<'EOF'
 ID=ubuntu
@@ -42,6 +47,13 @@ printf ' <%s>' "$@" >>"$FAKE_CALL_LOG"
 printf '\n' >>"$FAKE_CALL_LOG"
 case ${0##*/} in
   zsh)
+    if [ "${FAKE_ZSH_LARGE_OUTPUT:-0}" -eq 1 ]; then
+      line_number=1
+      while [ "$line_number" -le 20000 ]; do
+        printf 'large diagnostic line %s\n' "$line_number"
+        line_number=$((line_number + 1))
+      done
+    fi
     [ -z "${FAKE_ZSH_OUTPUT:-}" ] || printf '%b' "$FAKE_ZSH_OUTPUT"
     exit "${FAKE_ZSH_STATUS:-0}"
     ;;
@@ -69,8 +81,15 @@ cat >"$fake_bin/timeout" <<'EOF'
 printf 'timeout' >>"$FAKE_CALL_LOG"
 printf ' <%s>' "$@" >>"$FAKE_CALL_LOG"
 printf '\n' >>"$FAKE_CALL_LOG"
-[ "${1:-}" = 10 ] || exit 64
+duration=${1:-}
 shift
+case $duration:${1:-} in
+  10:*) : ;;
+  5:nvidia-smi)
+    [ "${FAKE_NVIDIA_TIMEOUT:-0}" -eq 0 ] || exit 124
+    ;;
+  *) exit 64 ;;
+esac
 "$@"
 EOF
 
@@ -92,19 +111,28 @@ printf 'lsmod\n' >>"$FAKE_CALL_LOG"
 printf '%s\n' "${FAKE_LSMOD_OUTPUT:-Module Size Used by}"
 EOF
 
-cat >"$fake_bin/pgrep" <<'EOF'
+cat >"$fake_bin/readlink" <<'EOF'
 #!/bin/bash
-printf 'pgrep' >>"$FAKE_CALL_LOG"
+printf 'readlink' >>"$FAKE_CALL_LOG"
 printf ' <%s>' "$@" >>"$FAKE_CALL_LOG"
 printf '\n' >>"$FAKE_CALL_LOG"
-[ "$#" -eq 3 ] || exit 97
+[ "$#" -eq 2 ] || exit 97
 [ "$1" = -f ] || exit 97
-[ "$2" = -- ] || exit 97
-[ "$3" = "$SETUP_POLICY_AGENT" ] || exit 97
-[ "${FAKE_POLICY_RUNNING:-1}" -eq 1 ]
+path=$2
+if [ -L "$path" ]; then
+  target=$(/usr/bin/readlink "$path") || exit 1
+  case $target in
+    /*) path=$target ;;
+    *) path=${path%/*}/$target ;;
+  esac
+fi
+directory=${path%/*}
+base=${path##*/}
+canonical_directory=$(CDPATH= cd -- "$directory" 2>/dev/null && pwd -P) || exit 1
+printf '%s/%s\n' "$canonical_directory" "$base"
 EOF
 
-for forbidden in service modprobe ubuntu-drivers; do
+for forbidden in service modprobe pgrep ubuntu-drivers; do
   cat >"$fake_bin/$forbidden" <<EOF
 #!/bin/bash
 printf '$forbidden' >>"\$FAKE_CALL_LOG"
@@ -122,13 +150,16 @@ run_doctor() {
     PATH="$fake_bin:/usr/bin:/bin" \
     SETUP_OS_RELEASE="${SETUP_OS_RELEASE:-$tmp_dir/os-release}" \
     SETUP_POLICY_AGENT="${SETUP_POLICY_AGENT:-$policy_agent}" \
+    SETUP_PROC_ROOT="${SETUP_PROC_ROOT:-$proc_root}" \
+    TMPDIR="$runtime_tmp" \
     SWAYSOCK="${SWAYSOCK:-}" \
     XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-}" \
     FAKE_CALL_LOG="$call_log" \
     FAKE_INACTIVE_SERVICE="${FAKE_INACTIVE_SERVICE:-}" \
     FAKE_LSMOD_OUTPUT="${FAKE_LSMOD_OUTPUT:-}" \
     FAKE_NVIDIA_STATUS="${FAKE_NVIDIA_STATUS:-0}" \
-    FAKE_POLICY_RUNNING="${FAKE_POLICY_RUNNING:-1}" \
+    FAKE_NVIDIA_TIMEOUT="${FAKE_NVIDIA_TIMEOUT:-0}" \
+    FAKE_ZSH_LARGE_OUTPUT="${FAKE_ZSH_LARGE_OUTPUT:-0}" \
     FAKE_ZSH_OUTPUT="${FAKE_ZSH_OUTPUT:-}" \
     FAKE_ZSH_STATUS="${FAKE_ZSH_STATUS:-0}" \
     /bin/bash bin/doctor "${DOCTOR_PROFILE:-work}" 2>&1)
@@ -182,7 +213,7 @@ assert_contains "$doctor_output" ' WARN 1 SKIP 1 FAIL 0' 'warnings and skips do 
 assert_contains "$(cat "$call_log")" 'timeout <10> <bash> <-lic> <exit>' 'Bash startup is bounded to ten seconds'
 assert_contains "$(cat "$call_log")" 'timeout <10> <zsh> <-lic> <exit>' 'Zsh startup is bounded to ten seconds'
 case $(cat "$call_log") in
-  *systemctl*|*pgrep*) fail 'non-Sway sessions do not query user services or the policy agent' ;;
+  *systemctl*|*readlink*) fail 'non-Sway sessions do not query user services or the policy agent' ;;
 esac
 
 mv "$fake_bin/nvim" "$fake_bin/nvim.saved"
@@ -229,11 +260,24 @@ case $doctor_output in
   *'partial output'*) fail 'timeout output does not obscure the bounded-time diagnosis' ;;
 esac
 
+runtime_before=$(find "$runtime_tmp" -type f -print | LC_ALL=C sort)
+FAKE_ZSH_STATUS=7 FAKE_ZSH_LARGE_OUTPUT=1 run_doctor
+assert_eq 1 "$doctor_status" 'large shell diagnostics preserve the command status'
+assert_contains "$doctor_output" 'FAIL shell startup: zsh (status 7)' 'bounded capture preserves a nonzero producer status'
+assert_contains "$doctor_output" '  large diagnostic line 20' 'bounded capture retains useful leading output'
+case $doctor_output in
+  *'large diagnostic line 21'*) fail 'large shell diagnostics remain bounded to twenty displayed lines' ;;
+esac
+assert_eq "$runtime_before" "$(find "$runtime_tmp" -type f -print | LC_ALL=C sort)" 'bounded shell capture creates no temporary files'
+doctor_source=$(cat "$test_repo/bin/doctor")
+assert_contains "$doctor_source" 'head -c 4096' 'shell output is bounded during capture'
+assert_contains "$doctor_source" 'cat >/dev/null' 'shell output beyond the capture limit is drained'
+
 XDG_CURRENT_DESKTOP=noswaydesktop run_doctor
 assert_eq 0 "$doctor_status" 'a desktop name merely containing sway is not a Sway session'
 assert_contains "$doctor_output" 'SKIP Sway session checks: not running under Sway' 'non-token desktop name skips Sway checks'
 case $(cat "$call_log") in
-  *systemctl*|*pgrep*) fail 'a non-token desktop name does not trigger Sway checks' ;;
+  *systemctl*|*readlink*) fail 'a non-token desktop name does not trigger Sway checks' ;;
 esac
 
 SWAYSOCK="$tmp_dir/sway.sock" run_doctor
@@ -245,22 +289,30 @@ for service_name in pipewire.service wireplumber.service xdg-desktop-portal.serv
     "$service_name is queried read-only"
 done
 assert_contains "$doctor_output" "PASS policy agent: $policy_agent (running)" 'the executable running policy agent passes'
-assert_contains "$(cat "$call_log")" "pgrep <-f> <--> <$policy_agent>" 'policy agent process is queried read-only using its exact path'
+assert_contains "$(cat "$call_log")" "readlink <-f> <$policy_agent>" 'policy agent executable is canonicalized read-only'
+assert_contains "$(cat "$call_log")" "readlink <-f> <$proc_root/123/exe>" 'proc executable identity is canonicalized read-only'
+case $(cat "$call_log") in
+  *pgrep*) fail 'policy agent verification never performs a command-line regex search' ;;
+esac
 if grep '^policy-agent\([[:space:]]\|$\)' "$call_log" >/dev/null 2>&1; then
   fail 'doctor never starts the policy agent executable'
 fi
 
-XDG_CURRENT_DESKTOP='GNOME:SwAy' run_doctor
+XDG_CURRENT_DESKTOP=' GNOME : SwAy ' run_doctor
 assert_eq 0 "$doctor_status" 'a case-insensitive colon-delimited Sway token enables session checks'
-assert_contains "$doctor_output" 'PASS user service: pipewire.service' 'the exact Sway desktop token triggers service checks'
+assert_contains "$doctor_output" 'PASS user service: pipewire.service' 'trimmed exact Sway desktop token triggers service checks'
 
 SWAYSOCK="$tmp_dir/sway.sock" SETUP_POLICY_AGENT="$tmp_dir/missing-policy-agent" run_doctor
 assert_eq 1 "$doctor_status" 'a missing Sway policy agent executable fails the doctor'
 assert_contains "$doctor_output" "FAIL policy agent: not executable: $tmp_dir/missing-policy-agent" 'missing policy agent executable is identified'
 
-SWAYSOCK="$tmp_dir/sway.sock" FAKE_POLICY_RUNNING=0 run_doctor
+SWAYSOCK="$tmp_dir/sway.sock" SETUP_PROC_ROOT="$empty_proc_root" run_doctor
 assert_eq 1 "$doctor_status" 'a non-running Sway policy agent fails the doctor'
 assert_contains "$doctor_output" "FAIL policy agent: not running: $policy_agent" 'non-running policy agent is identified'
+
+SWAYSOCK="$tmp_dir/sway.sock" SETUP_PROC_ROOT="$tmp_dir/missing-proc" run_doctor
+assert_eq 1 "$doctor_status" 'an unavailable proc tree fails policy-agent verification'
+assert_contains "$doctor_output" "FAIL policy agent: cannot verify process state: $tmp_dir/missing-proc unavailable" 'unavailable proc tree is identified'
 
 SETUP_POLICY_AGENT=relative/policy-agent run_doctor
 assert_eq 2 "$doctor_status" 'a relative injected policy agent path is invalid configuration'
@@ -271,6 +323,11 @@ SETUP_POLICY_AGENT=$'/tmp/policy-agent\nbad' run_doctor
 assert_eq 2 "$doctor_status" 'a policy agent path containing control characters is invalid configuration'
 assert_contains "$doctor_output" 'invalid policy agent path' 'unsafe policy agent path is rejected safely'
 assert_eq '' "$(cat "$call_log")" 'unsafe policy agent path is rejected before operational checks'
+
+SETUP_PROC_ROOT=relative/proc run_doctor
+assert_eq 2 "$doctor_status" 'a relative injected proc root is invalid configuration'
+assert_contains "$doctor_output" 'invalid proc root: relative/proc' 'relative proc root is identified'
+assert_eq '' "$(cat "$call_log")" 'relative proc root is rejected before operational checks'
 
 SWAYSOCK="$tmp_dir/sway.sock" FAKE_INACTIVE_SERVICE=xdg-desktop-portal-wlr.service run_doctor
 assert_eq 1 "$doctor_status" 'an inactive Sway portal fails the doctor'
@@ -293,6 +350,7 @@ chmod +x "$fake_bin/nvidia-smi"
 run_doctor
 assert_eq 0 "$doctor_status" 'proprietary NVIDIA detection remains warning-only'
 assert_contains "$doctor_output" 'WARN PROPRIETARY NVIDIA DRIVER DETECTED' 'successful nvidia-smi detection is prominent'
+assert_contains "$(cat "$call_log")" 'timeout <5> <nvidia-smi>' 'nvidia-smi is bounded to five seconds'
 
 FAKE_NVIDIA_STATUS=9 run_doctor
 assert_eq 0 "$doctor_status" 'an unusable nvidia-smi command does not fail the doctor'
@@ -300,14 +358,28 @@ case $doctor_output in
   *'PROPRIETARY NVIDIA DRIVER DETECTED'*) fail 'a nonzero nvidia-smi command is not evidence of a loaded proprietary driver' ;;
 esac
 
+FAKE_NVIDIA_TIMEOUT=1 run_doctor
+assert_eq 0 "$doctor_status" 'a timed-out nvidia-smi probe does not fail the doctor'
+case $doctor_output in
+  *'PROPRIETARY NVIDIA DRIVER DETECTED'*) fail 'a timed-out nvidia-smi probe falls back without becoming evidence itself' ;;
+esac
+assert_contains "$(cat "$call_log")" 'lsmod' 'a timed-out nvidia-smi probe falls back to loaded modules'
+
 FAKE_NVIDIA_STATUS=9 FAKE_LSMOD_OUTPUT=$'Module Size Used by\nnvidia_drm 123 0' run_doctor
 assert_eq 0 "$doctor_status" 'a loaded proprietary NVIDIA module remains warning-only'
 assert_contains "$doctor_output" 'WARN PROPRIETARY NVIDIA DRIVER DETECTED' 'lsmod is used after an unusable nvidia-smi command'
 
-FAKE_NVIDIA_STATUS=9 FAKE_LSMOD_OUTPUT=$'Module Size Used by\nnotnvidia 123 0' run_doctor
-assert_eq 0 "$doctor_status" 'an unrelated loaded module does not fail the doctor'
-case $doctor_output in
-  *'PROPRIETARY NVIDIA DRIVER DETECTED'*) fail 'NVIDIA module detection matches only a first token beginning nvidia' ;;
-esac
+FAKE_NVIDIA_STATUS=9 FAKE_LSMOD_OUTPUT=$'Module Size Used by\nnvidia 123 0' run_doctor
+assert_eq 0 "$doctor_status" 'the exact nvidia module remains warning-only'
+assert_contains "$doctor_output" 'WARN PROPRIETARY NVIDIA DRIVER DETECTED' 'the exact nvidia module token is detected'
+
+for unrelated_module in notnvidia nvidia_ nvidiafb nvidialies; do
+  FAKE_NVIDIA_STATUS=9 FAKE_LSMOD_OUTPUT="Module Size Used by
+$unrelated_module 123 0" run_doctor
+  assert_eq 0 "$doctor_status" "the $unrelated_module module does not fail the doctor"
+  case $doctor_output in
+    *'PROPRIETARY NVIDIA DRIVER DETECTED'*) fail "module detection excludes $unrelated_module" ;;
+  esac
+done
 
 printf 'ok - doctor is manifest-scoped, bounded, read-only, and session-aware\n'

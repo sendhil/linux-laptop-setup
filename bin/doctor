@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -o pipefail
+
 if [ "$#" -ne 1 ]; then
   printf 'usage: %s PROFILE\n' "$0" >&2
   exit 2
@@ -21,12 +23,21 @@ uv_requirements=$(read_tool_file uv manifests/uv-tools.txt) || exit 2
 external_assumptions=$(load_external_assumptions "$profile") || exit 2
 
 policy_agent=${SETUP_POLICY_AGENT:-/usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1}
+proc_root=${SETUP_PROC_ROOT:-/proc}
 if [[ $policy_agent != /* ]]; then
   printf 'error: invalid policy agent path: %s\n' "$policy_agent" >&2
   exit 2
 fi
 if [[ $policy_agent =~ [[:cntrl:]] ]]; then
   printf 'error: invalid policy agent path\n' >&2
+  exit 2
+fi
+if [[ $proc_root != /* ]]; then
+  printf 'error: invalid proc root: %s\n' "$proc_root" >&2
+  exit 2
+fi
+if [[ $proc_root =~ [[:cntrl:]] ]]; then
+  printf 'error: invalid proc root\n' >&2
   exit 2
 fi
 
@@ -85,10 +96,16 @@ check_external() {
   fi
 }
 
+capture_bounded_command() {
+  bounded_output=$("$@" 2>&1 | { head -c 4096; cat >/dev/null; })
+  bounded_status=$?
+}
+
 check_shell_startup() {
   shell_name=$1
-  shell_output=$(timeout 10 "$shell_name" -lic exit 2>&1)
-  shell_status=$?
+  capture_bounded_command timeout 10 "$shell_name" -lic exit
+  shell_output=$bounded_output
+  shell_status=$bounded_status
   case $shell_status in
     0)
       pass "shell startup: $shell_name"
@@ -121,11 +138,45 @@ check_user_service() {
 check_policy_agent() {
   if [ ! -x "$policy_agent" ]; then
     fail_check "policy agent: not executable: $policy_agent"
-  elif pgrep -f -- "$policy_agent" >/dev/null 2>&1; then
-    pass "policy agent: $policy_agent (running)"
-  else
-    fail_check "policy agent: not running: $policy_agent"
+    return
   fi
+  if [ ! -d "$proc_root" ] || [ ! -r "$proc_root" ]; then
+    fail_check "policy agent: cannot verify process state: $proc_root unavailable"
+    return
+  fi
+  canonical_policy_agent=$(readlink -f "$policy_agent" 2>/dev/null) || {
+    fail_check "policy agent: cannot verify executable identity: $policy_agent"
+    return
+  }
+  for process_exe in "$proc_root"/[0-9]*/exe; do
+    process_id=${process_exe#"$proc_root"/}
+    process_id=${process_id%/exe}
+    case $process_id in
+      ''|*[!0-9]*) continue ;;
+    esac
+    canonical_process_exe=$(readlink -f "$process_exe" 2>/dev/null) || continue
+    if [ "$canonical_process_exe" = "$canonical_policy_agent" ]; then
+      pass "policy agent: $policy_agent (running)"
+      return
+    fi
+  done
+  fail_check "policy agent: not running: $policy_agent"
+}
+
+is_sway_desktop() {
+  old_ifs=$IFS
+  IFS=:
+  read -r -a desktop_parts <<<"${XDG_CURRENT_DESKTOP:-}"
+  IFS=$old_ifs
+  for desktop_part in "${desktop_parts[@]}"; do
+    normalized_part=$(printf '%s' "$desktop_part" |
+      sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' |
+      LC_ALL=C tr '[:upper:]' '[:lower:]')
+    if [ "$normalized_part" = sway ]; then
+      return 0
+    fi
+  done
+  return 1
 }
 
 # A package is checked only when it is part of the normalized active profile.
@@ -175,11 +226,11 @@ while IFS=$'\t' read -r assumption_type command_name; do
   esac
 done <<<"$external_assumptions"
 
-desktop_tokens=$(printf '%s' "${XDG_CURRENT_DESKTOP:-}" | LC_ALL=C tr '[:upper:]' '[:lower:]')
-case :$desktop_tokens: in
-  *:sway:*) sway_session=1 ;;
-  *) [ -n "${SWAYSOCK:-}" ] && sway_session=1 || sway_session=0 ;;
-esac
+if is_sway_desktop || [ -n "${SWAYSOCK:-}" ]; then
+  sway_session=1
+else
+  sway_session=0
+fi
 
 if [ "$sway_session" -eq 1 ]; then
   check_user_service pipewire.service
@@ -192,10 +243,11 @@ else
 fi
 
 proprietary_nvidia=0
-if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+if command -v nvidia-smi >/dev/null 2>&1 && \
+  timeout 5 nvidia-smi >/dev/null 2>&1; then
   proprietary_nvidia=1
 elif command -v lsmod >/dev/null 2>&1 && \
-  lsmod 2>/dev/null | grep -Eq '^nvidia[^[:space:]]*[[:space:]]'; then
+  lsmod 2>/dev/null | grep -Eq '^nvidia([[:space:]]|_[^[:space:]]+[[:space:]])'; then
   proprietary_nvidia=1
 fi
 if [ "$proprietary_nvidia" -eq 1 ]; then
