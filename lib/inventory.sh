@@ -43,14 +43,54 @@ npm_inventory() {
 }
 
 uv_inventory() {
-  tool_dir=${UV_TOOL_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/uv/tools}
-  if [ ! -e "$tool_dir" ] && [ ! -L "$tool_dir" ]; then
+  if [ "${UV_TOOL_DIR+x}" = x ]; then
+    case $UV_TOOL_DIR in
+      /*) tool_dir=$UV_TOOL_DIR ;;
+      *)
+        printf 'error: UV_TOOL_DIR must be absolute\n' >&2
+        return 2
+        ;;
+    esac
+  else
+    case ${XDG_DATA_HOME:-} in
+      /*) tool_dir=$XDG_DATA_HOME/uv/tools ;;
+      *)
+        case ${HOME:-} in
+          /*) tool_dir=$HOME/.local/share/uv/tools ;;
+          *)
+            printf 'error: HOME must be absolute when resolving the uv tools directory\n' >&2
+            return 2
+            ;;
+        esac
+        ;;
+    esac
+  fi
+  while [ "$tool_dir" != / ] && [ "${tool_dir%/}" != "$tool_dir" ]; do
+    tool_dir=${tool_dir%/}
+  done
+  if [ -L "$tool_dir" ]; then
+    printf 'error: uv tools directory must not be a symbolic link: %s\n' "$tool_dir" >&2
+    return 2
+  fi
+  if [ ! -e "$tool_dir" ]; then
     return 0
   fi
-  [ -d "$tool_dir" ] && [ -r "$tool_dir" ] || return 2
-  entries=$(find "$tool_dir" -mindepth 1 -maxdepth 1 -type d ! -name '.*' -exec basename {} \; 2>/dev/null) || return 2
-  [ -z "$entries" ] || printf '%s\n' "$entries" | \
-    sed -n '/^[a-z0-9][a-z0-9-]*$/ { /--/d; /-$/d; p; }' | LC_ALL=C sort -u
+  if [ ! -d "$tool_dir" ] || [ ! -r "$tool_dir" ] || [ ! -x "$tool_dir" ]; then
+    printf 'error: uv tools path is not a readable directory: %s\n' "$tool_dir" >&2
+    return 2
+  fi
+
+  names=()
+  for entry in "$tool_dir"/*; do
+    if [ ! -e "$entry" ] && [ ! -L "$entry" ]; then
+      continue
+    fi
+    [ -d "$entry" ] && [ ! -L "$entry" ] || continue
+    name=${entry##*/}
+    [[ $name =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || continue
+    names+=("$name")
+  done
+  [ "${#names[@]}" -eq 0 ] || printf '%s\n' "${names[@]}" | LC_ALL=C sort -u
 }
 
 external_command_state() {
