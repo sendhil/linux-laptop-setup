@@ -1,21 +1,120 @@
-# Fedora
+# Linux laptop setup
 
-curl -s https://raw.githubusercontent.com/sendhil/linux-laptop-setup/master/init/fedora.sh | bash
+This repository has one supported path: an additive, reviewable setup for an
+Ubuntu work laptop. It prepares command-line tools and a Sway session while
+leaving the workplace-managed GNOME desktop available as the GNOME fallback.
+It does not remove packages, upgrade Ubuntu, manage graphics drivers, or
+enable, disable, start, or stop services.
 
+**Fedora and Lima:** the material under `fedora/`, `lima/`, and
+`init/fedora.sh` is historical and unsupported. Do not use it as an
+installation guide. No package or behavior from those directories is part of
+the supported Ubuntu setup.
 
-# Ubuntu
+## Clean Ubuntu workflow
 
-curl -s https://raw.githubusercontent.com/sendhil/linux-laptop-setup/master/init/ubuntu.sh | bash
+Clone this repository on the laptop and run these commands from its root:
 
+```bash
+bin/bootstrap
+bin/audit work
+bin/apply work
+bin/audit work
+bin/doctor work
+```
 
-# Lima
+`bin/bootstrap` detects Ubuntu, architecture, and visible graphics hardware,
+then installs only Git and CA certificates when they are missing. It may ask
+for `sudo`; it never downloads or executes an installer script.
 
-To skip the prompts to restart, make sure to run the command with NEEDRESTART_MODE=a, e.g. `sudo NEEDRESTART_MODE=a ./install-software.sh`
+The first `bin/audit work` is read-only. On a clean laptop it normally reports
+drift and exits `1`. Review that report and the manifests before running
+`bin/apply work`. Apply validates its complete plan first, installs only
+missing declared packages, and is safe to rerun. The second audit should
+converge. `bin/doctor work` checks commands, shell startup, external
+assumptions, and—when invoked inside Sway—session services and the policy
+agent. Warnings and skips remain visible but do not by themselves fail doctor.
 
-# i3gaps
+Compatibility entry points remain for older callers: `init/ubuntu.sh`
+delegates to bootstrap and `install-software.sh work` delegates to apply. New
+workflows should use the `bin/` commands directly.
 
-There's a quirk where the script doesn't properly setup i3-gaps. After the script runs hop over the i3-gaps folder and re-run `sudo make install` and it should work. I'll eventually sort this out, but for now just going to leave this note.
+## Command contracts and exit codes
 
-# i3lock-color
+| Command | `0` | `1` | `2` |
+| --- | --- | --- | --- |
+| `bin/bootstrap` | prerequisites are ready | prerequisite installation failed | usage, platform, inventory, or privilege prerequisite error |
+| `bin/audit work` | declared state is converged | missing or incompatible declared software | invalid configuration or unavailable/broken inventory manager |
+| `bin/apply work` | plan applied or already converged | a package/tool installation failed | usage, manifest, platform, inventory, candidate, or privilege preflight error |
+| `bin/doctor work` | no owned operational check failed | one or more owned operational checks failed | usage, manifest, or platform configuration error |
 
-On Fedora 30 there seems to be an issue where it fails to authenticate right off the bat. Try installing i3lock via dnf, make installing, and then removing i3lock via dnf (and reboot).
+An apply failure prints a rerun command. Fix the reported problem and rerun;
+completed work is discovered from current inventory rather than repeated.
+
+## Ownership and manifests
+
+The supported profile is assembled from small reviewed manifests:
+
+- `manifests/apt-common.txt` owns shared command-line and development packages.
+- `manifests/apt-sway.txt` owns the Sway session and laptop integration packages.
+- `profiles/work.apt.txt` is reserved for workplace-specific APT packages this
+  repository has explicitly agreed to own.
+- `manifests/npm.txt` and `manifests/uv-tools.txt` own reviewed developer tools
+  installed through their respective managers.
+- `profiles/work.external.txt` lists externally managed commands. Docker,
+  Kubernetes tooling, Slack, and Zoom are diagnosed but never installed,
+  upgraded, configured, or started here.
+
+Ubuntu and workplace IT continue to own the rest of the machine. Unlisted
+system packages are not drift. Corporate agents, VPNs, GNOME, GDM, graphics
+drivers, privileged container runtimes, and workplace applications stay under
+external ownership.
+
+Package-source policy is deliberately conservative: prefer Ubuntu packages
+for system and desktop integration; use npm or uv only for reviewed manifests;
+do not add a PPA, vendor repository, or source build silently. If Ubuntu cannot
+meet a declared version floor, audit reports the incompatibility and apply
+stops before mutation. Resolve that case explicitly with IT or update the
+reviewed manifest.
+
+## Dotfiles handoff
+
+Software setup belongs here; user configuration belongs in the cross-platform
+dotfiles repository. After this repository converges, clone the dotfiles
+repository, inspect its read-only Ubuntu preflight, and then link it:
+
+```bash
+make preflight-ubuntu
+make stow-ubuntu
+```
+
+Run those commands from the dotfiles checkout. Do not use a cleanup script to
+delete existing home-directory files; resolve every reported Stow conflict
+explicitly. The dotfiles setup provides the Sway configuration and portable
+local/SSH shell behavior.
+
+## Sway, GDM, and GNOME
+
+Log out, use GDM's session chooser on the login screen, and select Sway. GDM
+remembers the last chosen session, but GNOME remains installed and selectable
+at every login. Use GNOME immediately if Sway, screen sharing, or a corporate
+application prevents work. Follow [the first Sway login checklist](docs/first-sway-login.md)
+before relying on the session.
+
+> **NVIDIA warning:** the proprietary NVIDIA driver is not officially
+> supported by Sway. `bin/bootstrap` reports discoverable graphics hardware and
+> `bin/doctor work` prints a prominent warning when it detects that driver. Do
+> not change a workplace driver. Smoke-test Sway and retain GNOME as the
+> fallback; ask IT for help if the session is unreliable.
+
+## Recovery
+
+The annotated tag `pre-modernization-2026-08-11` points to the repository
+before this Ubuntu modernization. Inspect it with:
+
+```bash
+git show pre-modernization-2026-08-11
+```
+
+The tag is a reference for recovery and comparison, not a supported installer.
+Preserve current work before switching commits or restoring individual files.
