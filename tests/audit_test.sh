@@ -12,10 +12,12 @@ test_repo="$tmp_dir/repository"
 fake_bin="$tmp_dir/fake-bin"
 fake_home="$tmp_dir/home"
 npm_cache="$tmp_dir/npm-cache"
-mkdir -p "$test_repo" "$fake_bin" "$fake_home" "$npm_cache"
+runtime_tmp="$tmp_dir/runtime-tmp"
+mkdir -p "$test_repo" "$fake_bin" "$fake_home" "$npm_cache" "$runtime_tmp"
 cp -R "$repo_dir"/. "$test_repo"/
 printf 'home sentinel\n' >"$fake_home/sentinel"
 printf 'cache sentinel\n' >"$npm_cache/sentinel"
+printf 'temporary sentinel\n' >"$runtime_tmp/sentinel"
 
 cat >"$tmp_dir/os-release" <<'EOF'
 ID=ubuntu
@@ -82,14 +84,17 @@ run_audit() {
   set +e
   audit_output=$(cd "$test_repo" && env \
     HOME="$fake_home" \
+    TMPDIR="$runtime_tmp" \
     PATH="$fake_bin:/usr/bin:/bin" \
     SETUP_OS_RELEASE="$tmp_dir/os-release" \
     SETUP_AUDIT_NPM_CACHE="$npm_cache" \
+    SETUP_READ_LINES_COMMAND="${SETUP_READ_LINES_COMMAND:-}" \
     FAKE_MISSING_APT="${FAKE_MISSING_APT:-}" \
     FAKE_NEOVIM_VERSION="${FAKE_NEOVIM_VERSION:-}" \
     FAKE_NEOVIM_CANDIDATE="${FAKE_NEOVIM_CANDIDATE:-}" \
     FAKE_DPKG_FAILURE="${FAKE_DPKG_FAILURE:-}" \
     FAKE_APT_CACHE_FAILURE="${FAKE_APT_CACHE_FAILURE:-0}" \
+    FAKE_NPM_FAILURE="${FAKE_NPM_FAILURE:-0}" \
     bash bin/audit work 2>&1)
   audit_status=$?
   set -e
@@ -153,6 +158,11 @@ if [ "$safe" -ne 1 ]; then
   mkdir -p "$HOME/.npm/_logs"
   printf 'npm debug log\n' >"$HOME/.npm/_logs/audit-debug.log"
 fi
+if [ "${NODE_DISABLE_COMPILE_CACHE:-}" != 1 ]; then
+  mkdir -p "$TMPDIR/node-compile-cache"
+  printf 'node compile cache\n' >"$TMPDIR/node-compile-cache/audit-cache"
+fi
+[ "${FAKE_NPM_FAILURE:-0}" -eq 0 ] || exit 2
 printf '/opt/npm/lib/node_modules/prettier\n'
 EOF
 chmod +x "$fake_bin/npm"
@@ -160,11 +170,16 @@ printf 'prettier\n' >"$test_repo/manifests/npm.txt"
 repo_before=$(checksum_tree "$test_repo")
 home_before=$(checksum_tree "$fake_home")
 cache_before=$(checksum_tree "$npm_cache")
+tmp_before=$(checksum_tree "$runtime_tmp")
 run_audit
 assert_eq 0 "$audit_status" 'a satisfied nonempty npm manifest succeeds'
 assert_eq "$repo_before" "$(checksum_tree "$test_repo")" 'npm inventory does not modify the repository'
 assert_eq "$home_before" "$(checksum_tree "$fake_home")" 'npm inventory does not create home cache or logs'
 assert_eq "$cache_before" "$(checksum_tree "$npm_cache")" 'npm inventory does not modify its disposable cache'
+assert_eq "$tmp_before" "$(checksum_tree "$runtime_tmp")" 'npm inventory does not create a Node compile cache in temporary storage'
+FAKE_NPM_FAILURE=1 run_audit
+assert_eq 2 "$audit_status" 'npm inventory preserves manager failure status'
+assert_contains "$audit_output" 'npm inventory failed' 'npm inventory failure is reported'
 rm "$fake_bin/npm"
 printf '# Intentionally empty.\n' >"$test_repo/manifests/npm.txt"
 
@@ -196,6 +211,17 @@ mv "$test_repo/profiles/work.external.txt" "$test_repo/profiles/work.external.tx
 run_audit
 assert_eq 2 "$audit_status" 'a missing external manifest exits with status 2'
 mv "$test_repo/profiles/work.external.txt.saved" "$test_repo/profiles/work.external.txt"
+
+cat >"$fake_bin/fail-read-lines" <<'EOF'
+#!/bin/bash
+printf 'error: injected external manifest read failure\n' >&2
+exit 2
+EOF
+chmod +x "$fake_bin/fail-read-lines"
+SETUP_READ_LINES_COMMAND=fail-read-lines run_audit
+assert_eq 2 "$audit_status" 'an injected external manifest reader failure exits with status 2'
+assert_contains "$audit_output" 'injected external manifest read failure' 'injected reader failure propagates under every user'
+rm "$fake_bin/fail-read-lines"
 
 chmod 000 "$test_repo/profiles/work.external.txt"
 if [ ! -r "$test_repo/profiles/work.external.txt" ]; then

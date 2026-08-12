@@ -29,7 +29,8 @@ apt_candidate_version() {
 npm_inventory() {
   npm_cache=${SETUP_AUDIT_NPM_CACHE:-${TMPDIR:-/tmp}}
   [ -d "$npm_cache" ] || return 2
-  output=$(npm_config_cache="$npm_cache" \
+  output=$(NODE_DISABLE_COMPILE_CACHE=1 \
+    npm_config_cache="$npm_cache" \
     npm_config_logs_max=0 \
     npm_config_update_notifier=false \
     npm_config_audit=false \

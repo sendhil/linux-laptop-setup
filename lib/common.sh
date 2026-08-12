@@ -103,7 +103,13 @@ read_tool_file() {
 load_external_assumptions() {
   profile=$1
   validate_profile "$profile" || return 2
-  lines=$(read_lines "profiles/$profile.external.txt") || return 2
+  read_lines_command=${SETUP_READ_LINES_COMMAND:-read_lines}
+  if ! validate_tool_id command "$read_lines_command" || \
+    ! command -v "$read_lines_command" >/dev/null 2>&1; then
+    printf 'error: invalid manifest reader: %s\n' "$read_lines_command" >&2
+    return 2
+  fi
+  lines=$("$read_lines_command" "profiles/$profile.external.txt") || return 2
   [ -n "$lines" ] || return 0
   records=$(
     while IFS= read -r line; do
