@@ -7,6 +7,8 @@ repo_root=$(dirname "$script_dir")
 . "$repo_root/lib/common.sh"
 
 validate_profile_quiet() { validate_profile "$@" 2>/dev/null; }
+read_apt_file_quiet() { read_apt_file "$@" 2>/dev/null; }
+read_tool_file_quiet() { read_tool_file "$@" 2>/dev/null; }
 
 test_root=$(mktemp -d)
 trap 'rm -rf "$test_root"' EXIT
@@ -16,8 +18,8 @@ printf '%s\n' '  zebra  ' '# comment' '' 'alpha' 'zebra' >"$lines_file"
 assert_eq "$(printf 'alpha\nzebra')" "$(read_lines "$lines_file")" "read_lines normalizes comments, blanks, and duplicates"
 
 apt_file="$test_root/apt.txt"
-printf '%s\n' 'neovim 0.9.0' 'libfoo:amd64 1.2.0' 'neovim 0.9.0' >"$apt_file"
-assert_eq "$(printf 'libfoo:amd64\t1.2.0\nneovim\t0.9.0')" "$(read_apt_file "$apt_file")" "read_apt_file emits unique tab-separated records"
+printf '%s\n' 'neovim 0.9.0' 'libfoo:amd64 1.2.0' 'name+variant.x-1:arm64' 'neovim 0.9.0' >"$apt_file"
+assert_eq "$(printf 'libfoo:amd64\t1.2.0\nname+variant.x-1:arm64\t\nneovim\t0.9.0')" "$(read_apt_file "$apt_file")" "read_apt_file accepts Debian package and architecture syntax"
 
 bad_whitespace="$test_root/bad-whitespace.txt"
 printf '%s\n' 'too many fields here' >"$bad_whitespace"
@@ -26,6 +28,24 @@ assert_status 2 read_apt_file "$bad_whitespace"
 bad_punctuation="$test_root/bad-punctuation.txt"
 printf '%s\n' 'git;uname' >"$bad_punctuation"
 assert_status 2 read_apt_file "$bad_punctuation"
+
+for malformed_apt_id in '-git' '.git' '+git' 'a' 'git:' ':amd64' 'git::amd64' 'git:amd64:extra' 'git:AMD64' 'git:_amd64'; do
+  malformed_apt_file="$test_root/malformed-apt.txt"
+  printf '%s\n' "$malformed_apt_id" >"$malformed_apt_file"
+  assert_status 2 read_apt_file "$malformed_apt_file"
+done
+
+assert_status 2 read_apt_file_quiet "$test_root/missing-apt.txt"
+assert_status 2 read_tool_file_quiet npm "$test_root/missing-npm.txt"
+
+unreadable_apt="$test_root/unreadable-apt.txt"
+unreadable_tool="$test_root/unreadable-tool.txt"
+printf 'git\n' >"$unreadable_apt"
+printf 'prettier\n' >"$unreadable_tool"
+chmod 000 "$unreadable_apt" "$unreadable_tool"
+assert_status 2 read_apt_file_quiet "$unreadable_apt"
+assert_status 2 read_tool_file_quiet npm "$unreadable_tool"
+chmod 600 "$unreadable_apt" "$unreadable_tool"
 
 mkdir -p "$test_root/profiles"
 (

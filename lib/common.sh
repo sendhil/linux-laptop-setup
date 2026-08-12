@@ -5,6 +5,10 @@ sorted_unique() {
 }
 
 read_lines() {
+  if [ ! -f "$1" ] || [ ! -r "$1" ]; then
+    printf 'error: cannot read manifest: %s\n' "$1" >&2
+    return 2
+  fi
   sorted_unique <"$1"
 }
 
@@ -29,11 +33,7 @@ validate_apt_entry() {
   set -- $line
   set +f
   [ "$#" -ge 1 ] && [ "$#" -le 2 ] || return 2
-  case $1 in
-    ''|*[!a-z0-9+.\-:]*|:*|*:)
-      return 2
-      ;;
-  esac
+  [[ $1 =~ ^[a-z0-9][a-z0-9+.-]+(:[a-z0-9][a-z0-9-]*)?$ ]] || return 2
   if [ "$#" -eq 2 ]; then
     case $2 in
       ''|*[!A-Za-z0-9.+:~_-]*) return 2 ;;
@@ -43,6 +43,10 @@ validate_apt_entry() {
 }
 
 read_apt_file() {
+  if [ ! -f "$1" ] || [ ! -r "$1" ]; then
+    printf 'error: cannot read APT manifest: %s\n' "$1" >&2
+    return 2
+  fi
   records=$(
     while IFS= read -r line; do
       validate_apt_entry "$line" || exit 2
@@ -83,6 +87,10 @@ validate_tool_id() {
 read_tool_file() {
   type=$1
   file=$2
+  if [ ! -f "$file" ] || [ ! -r "$file" ]; then
+    printf 'error: cannot read %s manifest: %s\n' "$type" "$file" >&2
+    return 2
+  fi
   records=$(
     while IFS= read -r id; do
       validate_tool_id "$type" "$id" || exit 2

@@ -8,53 +8,53 @@ repo_root=$(dirname "$script_dir")
 
 cd "$repo_root"
 
-expected_common=$(cat <<'EOF'
-bash-completion	
-bat	
-build-essential	
-ca-certificates	
-curl	
-direnv	
-fd-find	
-fzf	
-git	
-jq	
-kitty	
-neovim	0.9.0
-pipx	
-python3	
-ripgrep	
-shellcheck	
-stow	
-tmux	
-tree	
-zoxide	
-zsh	
+expected_common=$(awk '{ printf "%s\t%s\n", $1, $2 }' <<'EOF'
+bash-completion
+bat
+build-essential
+ca-certificates
+curl
+direnv
+fd-find
+fzf
+git
+jq
+kitty
+neovim 0.9.0
+pipx
+python3
+ripgrep
+shellcheck
+stow
+tmux
+tree
+zoxide
+zsh
 EOF
 )
-expected_sway=$(cat <<'EOF'
-blueman	
-brightnessctl	
-dbus-user-session	
-fuzzel	
-grim	
-libnotify-bin	
-mako-notifier	
-network-manager-gnome	
-pipewire	
-playerctl	
-policykit-1-gnome	
-slurp	
-sway	
-swayidle	
-swaylock	
-waybar	
-wireplumber	
-wl-clipboard	
-xdg-desktop-portal	
-xdg-desktop-portal-gtk	
-xdg-desktop-portal-wlr	
-xwayland	
+expected_sway=$(awk '{ printf "%s\t%s\n", $1, $2 }' <<'EOF'
+blueman
+brightnessctl
+dbus-user-session
+fuzzel
+grim
+libnotify-bin
+mako-notifier
+network-manager-gnome
+pipewire
+playerctl
+policykit-1-gnome
+slurp
+sway
+swayidle
+swaylock
+waybar
+wireplumber
+wl-clipboard
+xdg-desktop-portal
+xdg-desktop-portal-gtk
+xdg-desktop-portal-wlr
+xwayland
 EOF
 )
 

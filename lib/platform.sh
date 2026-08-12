@@ -31,12 +31,29 @@ detect_arch() {
     printf 'error: dpkg is unavailable\n' >&2
     return 2
   fi
-  dpkg --print-architecture
+  arch=$(dpkg --print-architecture 2>/dev/null) || {
+    printf 'error: cannot detect dpkg architecture\n' >&2
+    return 2
+  }
+  case $arch in
+    ''|*[!a-z0-9-]*)
+      printf 'error: cannot detect dpkg architecture\n' >&2
+      return 2
+      ;;
+  esac
+  printf '%s\n' "$arch"
 }
 
 graphics_summary() {
   if command -v lspci >/dev/null 2>&1; then
-    lspci -nnk | sed -n -e '/VGA compatible controller/p' -e '/3D controller/p' -e '/Display controller/p'
+    lspci -nnk | awk '
+      /^[^[:space:]]/ {
+        graphics = /VGA compatible controller|3D controller|Display controller/
+      }
+      graphics && (/^[^[:space:]]/ || /^[[:space:]]+Kernel (driver in use|modules):/) {
+        print
+      }
+    '
   else
     printf 'unavailable (lspci is not installed)\n'
   fi
