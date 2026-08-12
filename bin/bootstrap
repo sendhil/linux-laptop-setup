@@ -1,0 +1,75 @@
+#!/bin/bash
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
+cd "$repo_dir" || exit 2
+
+. "$repo_dir/lib/common.sh"
+. "$repo_dir/lib/platform.sh"
+. "$repo_dir/lib/inventory.sh"
+
+configuration_error() {
+  printf 'error: %s\n' "$1" >&2
+  exit 2
+}
+
+install_error() {
+  printf 'error: failed to install bootstrap prerequisite: %s\n' "$1" >&2
+  printf 'rerun: bin/bootstrap\n' >&2
+  exit 1
+}
+
+os_release=${SETUP_OS_RELEASE:-/etc/os-release}
+load_ubuntu_info "$os_release" || exit 2
+architecture=$(detect_arch) || exit 2
+graphics=$(graphics_summary) || configuration_error 'cannot inspect graphics hardware'
+
+printf 'Platform\n'
+printf '  Ubuntu: %s (%s)\n' "$UBUNTU_VERSION_ID" "$UBUNTU_VERSION_CODENAME"
+printf '  Architecture: %s\n' "$architecture"
+printf 'Graphics\n'
+while IFS= read -r line; do
+  printf '  %s\n' "$line"
+done <<<"$graphics"
+
+command -v dpkg-query >/dev/null 2>&1 || \
+  configuration_error 'APT inventory is unavailable: dpkg-query'
+
+prerequisites=$(printf 'ca-certificates\ngit\n')
+missing=''
+while IFS= read -r package; do
+  installed=$(apt_installed_version "$package")
+  inventory_status=$?
+  [ "$inventory_status" -eq 0 ] || \
+    configuration_error "APT inventory failed for $package"
+  [ -n "$installed" ] || missing=$(append_line "$missing" "$package")
+done <<<"$prerequisites"
+
+if [ -z "$missing" ]; then
+  printf 'bootstrap prerequisites already installed: ca-certificates git\n'
+  exit 0
+fi
+
+command -v apt-get >/dev/null 2>&1 || \
+  configuration_error 'APT is unavailable: apt-get'
+sudo_command=${SETUP_SUDO_COMMAND:-sudo}
+validate_tool_id command "$sudo_command" || \
+  configuration_error "invalid privilege command: $sudo_command"
+if ! command -v "$sudo_command" >/dev/null 2>&1; then
+  manual_packages=$(printf '%s\n' "$missing" | paste -sd ' ' -)
+  printf 'error: sudo is required to install missing bootstrap prerequisites\n' >&2
+  printf 'manual command: sudo apt-get update && sudo apt-get install -y --no-install-recommends -- %s\n' \
+    "$manual_packages" >&2
+  exit 2
+fi
+
+# Every platform, inventory, package-manager, and privilege check completes before
+# the first package-manager mutation below.
+"$sudo_command" apt-get update || install_error 'APT metadata'
+while IFS= read -r package; do
+  [ -n "$package" ] || continue
+  "$sudo_command" apt-get install -y --no-install-recommends -- "$package" || \
+    install_error "$package"
+done <<<"$missing"
+
+printf 'bootstrap complete\n'

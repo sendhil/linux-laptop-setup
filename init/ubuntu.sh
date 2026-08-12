@@ -1,20 +1,5 @@
-#!/bin/bash -e
+#!/bin/bash
 
-echo "Laptop Setup (Ubuntu)"
-
-echo "Installing git..."
-sudo apt-get install -yq git
-
-if [ ! -d ~/src/linux-laptop-setup ]; then
-  echo "Cloning Linux Laptop Setup..."
-  git clone https://github.com/sendhil/linux-laptop-setup ~/src/linux-laptop-setup
-  git clone https://github.com/sendhil/dotfiles ~/src/dotfiles
-  cd ~/src/dotfiles
-  git submodule update --init
-else
-  echo "Updating Linux Laptop Setup"
-  cd ~/src/linux-laptop-setup
-  git pull --ff-only
-  cd ~/src/dotfiles
-  git pull --ff-only
-fi
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+printf 'note: init/ubuntu.sh is deprecated; delegating to bin/bootstrap\n' >&2
+exec "$SCRIPT_DIR/bin/bootstrap" "$@"
