@@ -20,6 +20,16 @@ npm_requirements=$(read_tool_file npm manifests/npm.txt) || exit 2
 uv_requirements=$(read_tool_file uv manifests/uv-tools.txt) || exit 2
 external_assumptions=$(load_external_assumptions "$profile") || exit 2
 
+policy_agent=${SETUP_POLICY_AGENT:-/usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1}
+if [[ $policy_agent != /* ]]; then
+  printf 'error: invalid policy agent path: %s\n' "$policy_agent" >&2
+  exit 2
+fi
+if [[ $policy_agent =~ [[:cntrl:]] ]]; then
+  printf 'error: invalid policy agent path\n' >&2
+  exit 2
+fi
+
 os_release=${SETUP_OS_RELEASE:-/etc/os-release}
 load_ubuntu_info "$os_release" || exit 2
 detect_arch >/dev/null || exit 2
@@ -77,11 +87,26 @@ check_external() {
 
 check_shell_startup() {
   shell_name=$1
-  if timeout 10 "$shell_name" -lic exit >/dev/null 2>&1; then
-    pass "shell startup: $shell_name"
-  else
-    fail_check "shell startup: $shell_name"
-  fi
+  shell_output=$(timeout 10 "$shell_name" -lic exit 2>&1)
+  shell_status=$?
+  case $shell_status in
+    0)
+      pass "shell startup: $shell_name"
+      ;;
+    124)
+      fail_check "shell startup: $shell_name (timed out after 10s)"
+      ;;
+    *)
+      fail_check "shell startup: $shell_name (status $shell_status)"
+      if [ -n "$shell_output" ]; then
+        printf '%s\n' "$shell_output" |
+          sed -n '1,20p' |
+          sed $'s/\033\\[[0-9;]*[[:alpha:]]//g' |
+          LC_ALL=C tr -cd '\11\12\40-\176' |
+          sed 's/^/  /'
+      fi
+      ;;
+  esac
 }
 
 check_user_service() {
@@ -90,6 +115,16 @@ check_user_service() {
     pass "user service: $service_name"
   else
     fail_check "user service: $service_name"
+  fi
+}
+
+check_policy_agent() {
+  if [ ! -x "$policy_agent" ]; then
+    fail_check "policy agent: not executable: $policy_agent"
+  elif pgrep -f -- "$policy_agent" >/dev/null 2>&1; then
+    pass "policy agent: $policy_agent (running)"
+  else
+    fail_check "policy agent: not running: $policy_agent"
   fi
 }
 
@@ -140,8 +175,9 @@ while IFS=$'\t' read -r assumption_type command_name; do
   esac
 done <<<"$external_assumptions"
 
-case ${XDG_CURRENT_DESKTOP:-} in
-  *[Ss][Ww][Aa][Yy]*) sway_session=1 ;;
+desktop_tokens=$(printf '%s' "${XDG_CURRENT_DESKTOP:-}" | LC_ALL=C tr '[:upper:]' '[:lower:]')
+case :$desktop_tokens: in
+  *:sway:*) sway_session=1 ;;
   *) [ -n "${SWAYSOCK:-}" ] && sway_session=1 || sway_session=0 ;;
 esac
 
@@ -150,15 +186,16 @@ if [ "$sway_session" -eq 1 ]; then
   check_user_service wireplumber.service
   check_user_service xdg-desktop-portal.service
   check_user_service xdg-desktop-portal-wlr.service
+  check_policy_agent
 else
   skip 'Sway session checks: not running under Sway'
 fi
 
 proprietary_nvidia=0
-if command -v nvidia-smi >/dev/null 2>&1; then
+if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
   proprietary_nvidia=1
 elif command -v lsmod >/dev/null 2>&1 && \
-  lsmod 2>/dev/null | grep -Eq '^nvidia(_[^[:space:]]*)?[[:space:]]'; then
+  lsmod 2>/dev/null | grep -Eq '^nvidia[^[:space:]]*[[:space:]]'; then
   proprietary_nvidia=1
 fi
 if [ "$proprietary_nvidia" -eq 1 ]; then
