@@ -35,12 +35,12 @@ install_error() {
 }
 
 # Load and normalize every manifest before querying or mutating a manager.
-os_release=${SETUP_OS_RELEASE:-/etc/os-release}
-load_ubuntu_info "$os_release" || exit 2
-detect_arch >/dev/null || exit 2
 apt_requirements=$(load_apt_requirements "$profile") || exit 2
 npm_requirements=$(read_tool_file npm manifests/npm.txt) || exit 2
 uv_requirements=$(read_tool_file uv manifests/uv-tools.txt) || exit 2
+os_release=${SETUP_OS_RELEASE:-/etc/os-release}
+load_ubuntu_info "$os_release" || exit 2
+detect_arch >/dev/null || exit 2
 
 for command_name in dpkg-query apt-cache dpkg; do
   command -v "$command_name" >/dev/null 2>&1 || \

@@ -15,6 +15,7 @@ npm_cache="$tmp_dir/npm-cache"
 runtime_tmp="$tmp_dir/runtime-tmp"
 state_dir="$tmp_dir/state"
 call_log="$tmp_dir/calls.log"
+manager_log="$tmp_dir/manager-calls.log"
 mkdir -p "$test_repo" "$fake_bin" "$fake_home" "$npm_cache" "$runtime_tmp" "$state_dir"
 cp -R "$repo_dir"/. "$test_repo"/
 
@@ -40,19 +41,24 @@ printf 'bat\n' >"$state_dir/apt"
 : >"$state_dir/npm"
 : >"$state_dir/uv"
 : >"$call_log"
+: >"$manager_log"
 
 cat >"$fake_bin/dpkg-query" <<'EOF'
 #!/bin/bash
 package=${!#}
+printf 'dpkg-query <%s>\n' "$package" >>"$FAKE_MANAGER_LOG"
 [ "${FAKE_DPKG_FAILURE:-}" != "$package" ] || exit 2
 grep -Fx "$package" "$FAKE_STATE_DIR/apt" >/dev/null 2>&1 || exit 1
 version=1.0
 [ "$package" != neovim ] || version=${FAKE_NEOVIM_VERSION:-0.9.0}
-printf 'ii \t%s\n' "$version"
+status='ii '
+[ "${FAKE_HELD_APT:-}" != "$package" ] || status='hi '
+printf '%s\t%s\n' "$status" "$version"
 EOF
 
 cat >"$fake_bin/dpkg" <<'EOF'
 #!/bin/bash
+printf 'dpkg <%s>\n' "${1:-}" >>"$FAKE_MANAGER_LOG"
 case ${1:-} in
   --print-architecture) printf 'amd64\n' ;;
   --compare-versions)
@@ -67,6 +73,7 @@ EOF
 cat >"$fake_bin/apt-cache" <<'EOF'
 #!/bin/bash
 package=${!#}
+printf 'apt-cache <%s>\n' "$package" >>"$FAKE_MANAGER_LOG"
 [ "${FAKE_APT_CACHE_FAILURE:-}" != "$package" ] || exit 2
 case $package in
   neovim) candidate=${FAKE_NEOVIM_CANDIDATE:-0.9.0} ;;
@@ -103,6 +110,7 @@ cat >"$fake_bin/npm" <<'EOF'
 #!/bin/bash
 case ${1:-} in
   list)
+    printf 'npm <list>\n' >>"$FAKE_MANAGER_LOG"
     [ -d "${npm_config_cache:-}" ] || exit 90
     case ${npm_config_cache:-} in "$HOME"|"$HOME"/*) exit 91 ;; esac
     [ "${NODE_DISABLE_COMPILE_CACHE:-}" = 1 ] || exit 92
@@ -133,6 +141,7 @@ case ${1:-} in
   tool)
     case ${2:-} in
       list)
+        printf 'uv <tool-list>\n' >>"$FAKE_MANAGER_LOG"
         [ "${UV_NO_CACHE:-}" = 1 ] || exit 90
         [ "${UV_NO_PROGRESS:-}" = 1 ] || exit 91
         while IFS= read -r package; do
@@ -158,6 +167,7 @@ chmod +x "$fake_bin"/*
 
 run_apply() {
   : >"$call_log"
+  : >"$manager_log"
   set +e
   apply_output=$(cd "$test_repo" && env \
     HOME="$fake_home" \
@@ -168,7 +178,9 @@ run_apply() {
     SETUP_SUDO_COMMAND="${SETUP_SUDO_COMMAND:-sudo}" \
     FAKE_STATE_DIR="$state_dir" \
     FAKE_CALL_LOG="$call_log" \
+    FAKE_MANAGER_LOG="$manager_log" \
     FAKE_DPKG_FAILURE="${FAKE_DPKG_FAILURE:-}" \
+    FAKE_HELD_APT="${FAKE_HELD_APT:-}" \
     FAKE_APT_CACHE_FAILURE="${FAKE_APT_CACHE_FAILURE:-}" \
     FAKE_APT_CANDIDATE="${FAKE_APT_CANDIDATE:-1.0}" \
     FAKE_NEOVIM_CANDIDATE="${FAKE_NEOVIM_CANDIDATE:-0.9.0}" \
@@ -182,6 +194,10 @@ run_apply() {
 
 assert_no_mutation() {
   [ ! -s "$call_log" ] || fail "$1 (unexpected calls: $(tr '\n' ' ' <"$call_log"))"
+}
+
+assert_no_manager_call() {
+  [ ! -s "$manager_log" ] || fail "$1 (unexpected calls: $(tr '\n' ' ' <"$manager_log"))"
 }
 
 run_apply
@@ -199,6 +215,23 @@ assert_eq 0 "$apply_status" 'a completed apply is safely resumable'
 assert_no_mutation 'a completed rerun skips every manager mutation'
 
 # Every preflight failure below must happen before the first mutation.
+printf 'bat\n' >"$test_repo/profiles/work.apt.txt"
+run_apply
+assert_eq 2 "$apply_status" 'duplicate APT package across common and profile manifests is invalid configuration'
+assert_no_mutation 'identical layered APT duplicate is rejected before mutation'
+assert_no_manager_call 'identical layered APT duplicate is rejected before manager inventory'
+
+printf 'neovim 1.0.0\n' >"$test_repo/profiles/work.apt.txt"
+run_apply
+assert_eq 2 "$apply_status" 'layered APT package with differing floors is invalid configuration'
+assert_no_mutation 'differing layered APT floor is rejected before mutation'
+assert_no_manager_call 'differing layered APT floor is rejected before manager inventory'
+printf '# Empty for apply test.\n' >"$test_repo/profiles/work.apt.txt"
+
+FAKE_HELD_APT=bat run_apply
+assert_eq 0 "$apply_status" 'a held installed APT package is satisfied'
+assert_no_mutation 'a held package does not trigger APT mutation'
+
 printf '%s\n' '--unsafe' >"$test_repo/manifests/npm.txt"
 printf 'tree\n' | LC_ALL=C sort -u >"$state_dir/apt"
 run_apply

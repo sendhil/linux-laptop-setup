@@ -9,7 +9,7 @@ apt_installed_version() {
       record_status=${output%%$'\t'*}
       version=${output#*$'\t'}
       case $record_status in
-        ii*) printf '%s\n' "$version" ;;
+        ii*|hi*) printf '%s\n' "$version" ;;
       esac
       ;;
     1) return 0 ;;

@@ -67,10 +67,19 @@ mkdir -p "$test_root/profiles"
   assert_eq "$(printf 'command\tdocker\ncommand\tzoom')" "$(load_external_assumptions work)" "external assumptions are normalized records"
 )
 
-assert_status 0 validate_tool_id npm '@scope/tool-name'
-assert_status 0 validate_tool_id uv 'ruff'
-assert_status 2 validate_tool_id npm '--unsafe-option'
-assert_status 2 validate_tool_id uv 'ruff;uname'
+for npm_id in 'prettier' 'tool-name' 'tool.name' 'tool_name' '@scope/tool-name' '@scope.name/tool_name'; do
+  assert_status 0 validate_tool_id npm "$npm_id"
+done
+for malformed_npm_id in '--unsafe-option' '.' 'Foo' 'two words' 'name@1.0.0' '@scope/name@1.0.0' 'foo/bar' '@scope' '@scope/' '@/name' '@scope/name/extra' './name' '../name' '/tmp/name' 'https://example.test/name' 'git+ssh://example.test/name'; do
+  assert_status 2 validate_tool_id npm "$malformed_npm_id"
+done
+
+for uv_id in 'ruff' 'tool-name' 'tool.name' 'tool_name' 'tool2'; do
+  assert_status 0 validate_tool_id uv "$uv_id"
+done
+for malformed_uv_id in '--unsafe-option' '.' 'Ruff' 'two words' 'ruff@1.0' 'scope/ruff' './ruff' '../ruff' '/tmp/ruff' 'https://example.test/ruff' 'git+ssh://example.test/ruff'; do
+  assert_status 2 validate_tool_id uv "$malformed_uv_id"
+done
 
 assert_eq "$(printf 'alpha\nbeta')" "$(append_line alpha beta)" "append_line joins non-empty values"
 assert_eq beta "$(append_line '' beta)" "append_line handles an empty set"

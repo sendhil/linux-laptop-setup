@@ -58,12 +58,22 @@ read_apt_file() {
 load_apt_requirements() {
   profile=$1
   validate_profile "$profile" || return 2
-  requirements=$(
+  combined=$(
     read_apt_file manifests/apt-common.txt || exit 2
     read_apt_file manifests/apt-sway.txt || exit 2
     read_apt_file "profiles/$profile.apt.txt" || exit 2
   ) || return 2
-  [ -z "$requirements" ] || printf '%s\n' "$requirements" | LC_ALL=C sort -u
+  [ -n "$combined" ] || return 0
+  requirements=$(printf '%s\n' "$combined" | LC_ALL=C sort) || return 2
+  previous_package=''
+  while IFS=$'\t' read -r package required; do
+    if [ "$package" = "$previous_package" ]; then
+      printf 'error: duplicate APT package declaration: %s\n' "$package" >&2
+      return 2
+    fi
+    printf '%s\t%s\n' "$package" "$required"
+    previous_package=$package
+  done <<<"$requirements"
 }
 
 validate_tool_id() {
@@ -71,11 +81,13 @@ validate_tool_id() {
   id=$2
   case $type in
     npm)
-      case $id in
-        ''|-*|/*|@|@/*|*@*@*|*[!A-Za-z0-9@/._+-]*) return 2 ;;
-      esac
+      [[ $id =~ ^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$ ]] || \
+        [[ $id =~ ^@[a-z0-9]([a-z0-9._-]*[a-z0-9])?/[a-z0-9]([a-z0-9._-]*[a-z0-9])?$ ]] || return 2
       ;;
-    uv|command)
+    uv)
+      [[ $id =~ ^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$ ]] || return 2
+      ;;
+    command)
       case $id in
         ''|-*|*[!A-Za-z0-9._+-]*) return 2 ;;
       esac
