@@ -130,4 +130,66 @@ if [ ! -r "$unreadable_tools" ]; then
 fi
 chmod 700 "$unreadable_tools"
 
+searchable_ancestor="$tmp_dir/searchable-ancestor"
+mkdir -p "$searchable_ancestor"
+UV_TOOL_DIR="$searchable_ancestor/missing/uv/tools"
+run_uv_inventory
+assert_eq 0 "$uv_status" 'missing uv tools below a searchable ancestor is empty success'
+assert_eq '' "$uv_output" 'missing uv tools inventory is empty'
+[ ! -e "$searchable_ancestor/missing" ] || fail 'missing uv inventory never creates descendants'
+
+file_ancestor="$tmp_dir/file-ancestor"
+printf 'not a directory\n' >"$file_ancestor"
+UV_TOOL_DIR="$file_ancestor/missing/uv/tools"
+run_uv_inventory
+assert_eq 2 "$uv_status" 'missing uv tools below a non-directory ancestor is invalid'
+assert_contains "$uv_output" 'nearest existing ancestor' 'non-directory ancestor failure is explicit'
+
+forced_blocked="$tmp_dir/forced-blocked"
+mkdir -p "$forced_blocked"
+uv_path_is_searchable() {
+  [ "$1" != "$forced_blocked" ] && [ -x "$1" ]
+}
+UV_TOOL_DIR="$forced_blocked/missing/uv/tools"
+run_uv_inventory
+assert_eq 2 "$uv_status" 'injected unsearchable nearest ancestor is invalid for every effective user'
+assert_contains "$uv_output" 'nearest existing ancestor' 'unsearchable ancestor failure is explicit'
+[ ! -e "$forced_blocked/missing" ] || fail 'unsearchable ancestor probe never writes descendants'
+
+permission_blocked="$tmp_dir/permission-blocked"
+mkdir -p "$permission_blocked"
+chmod 000 "$permission_blocked"
+probe_inventory="$tmp_dir/inventory-probe-lib.sh"
+cp "$repo_root/lib/inventory.sh" "$probe_inventory"
+chmod 644 "$probe_inventory"
+if [ "$(id -u)" -ne 0 ]; then
+  set +e
+  UV_TOOL_DIR="$permission_blocked/missing/uv/tools" /bin/bash -c \
+    '. "$1"; uv_inventory' _ "$probe_inventory" >/dev/null 2>&1
+  probe_status=$?
+  set -e
+  assert_eq 2 "$probe_status" 'effective unprivileged user rejects an unsearchable ancestor'
+elif command -v runuser >/dev/null 2>&1 && id nobody >/dev/null 2>&1 && \
+  runuser -u nobody -- /bin/true >/dev/null 2>&1; then
+  chmod 755 "$tmp_dir"
+  probe_script="$tmp_dir/uv-permission-probe.sh"
+  cat >"$probe_script" <<'EOF'
+#!/bin/bash
+. "$1"
+UV_TOOL_DIR=$2
+export UV_TOOL_DIR
+uv_inventory
+EOF
+  chmod 755 "$probe_script"
+  set +e
+  runuser -u nobody -- /bin/bash "$probe_script" "$probe_inventory" \
+    "$permission_blocked/missing/uv/tools" >/dev/null 2>&1
+  probe_status=$?
+  set -e
+  assert_eq 2 "$probe_status" 'nobody rejects a missing uv root below an unsearchable ancestor'
+else
+  printf 'ok - unprivileged uv permission probe skipped (no working runuser/nobody)\n'
+fi
+chmod 700 "$permission_blocked"
+
 printf 'ok - inventory recognizes dpkg state and reads uv tools without mutation\n'

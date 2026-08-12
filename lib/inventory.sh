@@ -42,6 +42,10 @@ npm_inventory() {
   printf '%s\n' "$output" | sed -n 's|^.*node_modules/||p'
 }
 
+uv_path_is_searchable() {
+  [ -x "$1" ]
+}
+
 uv_inventory() {
   if [ "${UV_TOOL_DIR+x}" = x ]; then
     case $UV_TOOL_DIR in
@@ -73,6 +77,17 @@ uv_inventory() {
     return 2
   fi
   if [ ! -e "$tool_dir" ]; then
+    ancestor=$tool_dir
+    while [ ! -e "$ancestor" ] && [ ! -L "$ancestor" ]; do
+      parent=${ancestor%/*}
+      [ -n "$parent" ] || parent=/
+      [ "$parent" != "$ancestor" ] || break
+      ancestor=$parent
+    done
+    if [ ! -d "$ancestor" ] || ! uv_path_is_searchable "$ancestor"; then
+      printf 'error: nearest existing ancestor is not a searchable directory: %s\n' "$ancestor" >&2
+      return 2
+    fi
     return 0
   fi
   if [ ! -d "$tool_dir" ] || [ ! -r "$tool_dir" ] || [ ! -x "$tool_dir" ]; then
