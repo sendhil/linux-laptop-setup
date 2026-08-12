@@ -63,7 +63,7 @@ cat >"$fake_bin/sudo" <<'EOF'
 printf 'sudo' >>"$FAKE_CALL_LOG"
 printf ' <%s>' "$@" >>"$FAKE_CALL_LOG"
 printf '\n' >>"$FAKE_CALL_LOG"
-if [ "${1:-}" = -n ] && [ "${2:-}" = true ] && [ "$#" -eq 2 ]; then
+if [ "${1:-}" = -v ] && [ "$#" -eq 1 ]; then
   [ "${FAKE_SUDO_MODE:-allowed}" = allowed ]
   exit $?
 fi
@@ -164,8 +164,11 @@ assert_no_mutation 'satisfied prerequisites do not require sudo or APT'
 printf 'git\n' >"$state_dir/apt"
 run_bootstrap
 assert_eq 0 "$bootstrap_status" 'one missing prerequisite is installed'
-assert_contains "$(cat "$call_log")" 'sudo <-n> <true>' \
-  'bootstrap preflights sudo authorization noninteractively'
+assert_eq 'sudo <-v>' "$(sed -n '1p' "$call_log")" \
+  'bootstrap refreshes sudo credentials before any APT call'
+case $(cat "$call_log") in
+  *'<true>'*) fail 'bootstrap uses true as a sudo authorization probe' ;;
+esac
 assert_eq 1 "$(grep -c '^apt-get <update>$' "$call_log")" 'APT metadata updates once when a prerequisite is missing'
 assert_contains "$(cat "$call_log")" \
   'apt-get <install> <-y> <--no-install-recommends> <--> <ca-certificates>' \
@@ -193,10 +196,10 @@ esac
 
 : >"$state_dir/apt"
 FAKE_SUDO_MODE=denied run_bootstrap
-assert_eq 2 "$bootstrap_status" 'denied noninteractive sudo is an actionable prerequisite error'
+assert_eq 2 "$bootstrap_status" 'denied sudo credential refresh is an actionable prerequisite error'
 assert_contains "$bootstrap_output" \
   'manual command: sudo apt-get update && sudo apt-get install -y --no-install-recommends -- ca-certificates git' \
-  'denied privilege prints the exact manual bootstrap command'
+  'denied credential refresh prints the exact manual bootstrap command'
 assert_no_apt_call 'denied privilege is detected before APT metadata mutation'
 
 : >"$state_dir/apt"
