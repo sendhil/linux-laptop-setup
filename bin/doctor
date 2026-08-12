@@ -1,0 +1,172 @@
+#!/bin/bash
+
+if [ "$#" -ne 1 ]; then
+  printf 'usage: %s PROFILE\n' "$0" >&2
+  exit 2
+fi
+profile=$1
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
+cd "$repo_dir" || exit 2
+
+. "$repo_dir/lib/common.sh"
+. "$repo_dir/lib/platform.sh"
+
+# Validate the complete requested configuration before running any operational
+# command or service check.
+apt_requirements=$(load_apt_requirements "$profile") || exit 2
+npm_requirements=$(read_tool_file npm manifests/npm.txt) || exit 2
+uv_requirements=$(read_tool_file uv manifests/uv-tools.txt) || exit 2
+external_assumptions=$(load_external_assumptions "$profile") || exit 2
+
+os_release=${SETUP_OS_RELEASE:-/etc/os-release}
+load_ubuntu_info "$os_release" || exit 2
+detect_arch >/dev/null || exit 2
+
+passes=0
+warnings=0
+skips=0
+failures=0
+
+pass() {
+  printf 'PASS %s\n' "$1"
+  passes=$((passes + 1))
+}
+
+warn() {
+  printf 'WARN %s\n' "$1"
+  warnings=$((warnings + 1))
+}
+
+skip() {
+  printf 'SKIP %s\n' "$1"
+  skips=$((skips + 1))
+}
+
+fail_check() {
+  printf 'FAIL %s\n' "$1"
+  failures=$((failures + 1))
+}
+
+check_command() {
+  if command -v "$1" >/dev/null 2>&1; then
+    pass "command: $1"
+  else
+    fail_check "command: $1"
+  fi
+}
+
+check_fd_command() {
+  if command -v fd >/dev/null 2>&1; then
+    pass 'command: fd'
+  elif command -v fdfind >/dev/null 2>&1; then
+    pass 'command: fd (via fdfind)'
+  else
+    fail_check 'command: fd or fdfind'
+  fi
+}
+
+check_external() {
+  if command -v "$1" >/dev/null 2>&1; then
+    pass "external command: $1"
+  else
+    warn "external command: $1"
+  fi
+}
+
+check_shell_startup() {
+  shell_name=$1
+  if timeout 10 "$shell_name" -lic exit >/dev/null 2>&1; then
+    pass "shell startup: $shell_name"
+  else
+    fail_check "shell startup: $shell_name"
+  fi
+}
+
+check_user_service() {
+  service_name=$1
+  if systemctl --user is-active --quiet "$service_name" >/dev/null 2>&1; then
+    pass "user service: $service_name"
+  else
+    fail_check "user service: $service_name"
+  fi
+}
+
+# A package is checked only when it is part of the normalized active profile.
+# Packages that expose no user-facing executable are covered by the inventory
+# commands and, for session components, the service checks below.
+while IFS=$'\t' read -r package _required; do
+  [ -n "$package" ] || continue
+  case $package in
+    bat) check_command batcat ;;
+    blueman) check_command blueman-applet ;;
+    brightnessctl|curl|direnv|fuzzel|fzf|git|grim|jq|kitty|pipx|pipewire|playerctl|python3|shellcheck|slurp|stow|sway|swayidle|swaylock|tmux|tree|waybar|wireplumber|zoxide)
+      check_command "$package"
+      ;;
+    build-essential) check_command make ;;
+    fd-find) check_fd_command ;;
+    libnotify-bin) check_command notify-send ;;
+    mako-notifier) check_command mako ;;
+    network-manager-gnome) check_command nm-applet ;;
+    neovim) check_command nvim ;;
+    ripgrep) check_command rg ;;
+    wl-clipboard)
+      check_command wl-copy
+      check_command wl-paste
+      ;;
+    xwayland) check_command Xwayland ;;
+  esac
+done <<<"$apt_requirements"
+
+if [ -n "$npm_requirements" ]; then
+  check_command npm
+fi
+if [ -n "$uv_requirements" ]; then
+  check_command uv
+  while IFS= read -r tool_name; do
+    [ -n "$tool_name" ] || continue
+    check_command "$tool_name"
+  done <<<"$uv_requirements"
+fi
+
+check_shell_startup bash
+check_shell_startup zsh
+
+while IFS=$'\t' read -r assumption_type command_name; do
+  [ -n "$command_name" ] || continue
+  case $assumption_type in
+    command) check_external "$command_name" ;;
+  esac
+done <<<"$external_assumptions"
+
+case ${XDG_CURRENT_DESKTOP:-} in
+  *[Ss][Ww][Aa][Yy]*) sway_session=1 ;;
+  *) [ -n "${SWAYSOCK:-}" ] && sway_session=1 || sway_session=0 ;;
+esac
+
+if [ "$sway_session" -eq 1 ]; then
+  check_user_service pipewire.service
+  check_user_service wireplumber.service
+  check_user_service xdg-desktop-portal.service
+  check_user_service xdg-desktop-portal-wlr.service
+else
+  skip 'Sway session checks: not running under Sway'
+fi
+
+proprietary_nvidia=0
+if command -v nvidia-smi >/dev/null 2>&1; then
+  proprietary_nvidia=1
+elif command -v lsmod >/dev/null 2>&1 && \
+  lsmod 2>/dev/null | grep -Eq '^nvidia(_[^[:space:]]*)?[[:space:]]'; then
+  proprietary_nvidia=1
+fi
+if [ "$proprietary_nvidia" -eq 1 ]; then
+  warn 'PROPRIETARY NVIDIA DRIVER DETECTED: Sway does not officially support this driver'
+fi
+
+printf 'Summary: PASS %s WARN %s SKIP %s FAIL %s\n' \
+  "$passes" "$warnings" "$skips" "$failures"
+
+[ "$failures" -eq 0 ] || exit 1
+exit 0
