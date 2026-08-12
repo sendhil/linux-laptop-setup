@@ -11,9 +11,11 @@ trap 'rm -rf "$tmp_dir"' EXIT
 test_repo="$tmp_dir/repository"
 fake_bin="$tmp_dir/fake-bin"
 fake_home="$tmp_dir/home"
-mkdir -p "$test_repo" "$fake_bin" "$fake_home"
+npm_cache="$tmp_dir/npm-cache"
+mkdir -p "$test_repo" "$fake_bin" "$fake_home" "$npm_cache"
 cp -R "$repo_dir"/. "$test_repo"/
 printf 'home sentinel\n' >"$fake_home/sentinel"
+printf 'cache sentinel\n' >"$npm_cache/sentinel"
 
 cat >"$tmp_dir/os-release" <<'EOF'
 ID=ubuntu
@@ -82,6 +84,7 @@ run_audit() {
     HOME="$fake_home" \
     PATH="$fake_bin:/usr/bin:/bin" \
     SETUP_OS_RELEASE="$tmp_dir/os-release" \
+    SETUP_AUDIT_NPM_CACHE="$npm_cache" \
     FAKE_MISSING_APT="${FAKE_MISSING_APT:-}" \
     FAKE_NEOVIM_VERSION="${FAKE_NEOVIM_VERSION:-}" \
     FAKE_NEOVIM_CANDIDATE="${FAKE_NEOVIM_CANDIDATE:-}" \
@@ -136,6 +139,35 @@ assert_eq 2 "$audit_status" 'a needed unavailable npm manager is a configuration
 assert_contains "$audit_output" 'npm: unavailable' 'missing needed npm is reported as a manager error'
 printf '# Intentionally empty.\n' >"$test_repo/manifests/npm.txt"
 
+cat >"$fake_bin/npm" <<'EOF'
+#!/bin/bash
+safe=1
+[ -d "${npm_config_cache:-}" ] || safe=0
+case ${npm_config_cache:-} in "$HOME"|"$HOME"/*) safe=0 ;; esac
+[ "${npm_config_logs_max:-}" = 0 ] || safe=0
+[ "${npm_config_update_notifier:-}" = false ] || safe=0
+[ "${npm_config_audit:-}" = false ] || safe=0
+[ "${npm_config_fund:-}" = false ] || safe=0
+[ "${npm_config_progress:-}" = false ] || safe=0
+if [ "$safe" -ne 1 ]; then
+  mkdir -p "$HOME/.npm/_logs"
+  printf 'npm debug log\n' >"$HOME/.npm/_logs/audit-debug.log"
+fi
+printf '/opt/npm/lib/node_modules/prettier\n'
+EOF
+chmod +x "$fake_bin/npm"
+printf 'prettier\n' >"$test_repo/manifests/npm.txt"
+repo_before=$(checksum_tree "$test_repo")
+home_before=$(checksum_tree "$fake_home")
+cache_before=$(checksum_tree "$npm_cache")
+run_audit
+assert_eq 0 "$audit_status" 'a satisfied nonempty npm manifest succeeds'
+assert_eq "$repo_before" "$(checksum_tree "$test_repo")" 'npm inventory does not modify the repository'
+assert_eq "$home_before" "$(checksum_tree "$fake_home")" 'npm inventory does not create home cache or logs'
+assert_eq "$cache_before" "$(checksum_tree "$npm_cache")" 'npm inventory does not modify its disposable cache'
+rm "$fake_bin/npm"
+printf '# Intentionally empty.\n' >"$test_repo/manifests/npm.txt"
+
 printf 'ruff\n' >"$test_repo/manifests/uv-tools.txt"
 run_audit
 assert_eq 2 "$audit_status" 'a needed unavailable uv manager is a configuration error'
@@ -159,5 +191,18 @@ if [ ! -r "$test_repo/manifests/apt-common.txt" ]; then
   assert_contains "$audit_output" 'cannot read APT manifest' 'unreadable manifest failure propagates'
 fi
 chmod 644 "$test_repo/manifests/apt-common.txt"
+
+mv "$test_repo/profiles/work.external.txt" "$test_repo/profiles/work.external.txt.saved"
+run_audit
+assert_eq 2 "$audit_status" 'a missing external manifest exits with status 2'
+mv "$test_repo/profiles/work.external.txt.saved" "$test_repo/profiles/work.external.txt"
+
+chmod 000 "$test_repo/profiles/work.external.txt"
+if [ ! -r "$test_repo/profiles/work.external.txt" ]; then
+  run_audit
+  assert_eq 2 "$audit_status" 'an unreadable external manifest exits with status 2'
+  assert_contains "$audit_output" 'cannot read manifest' 'unreadable external manifest failure propagates'
+fi
+chmod 644 "$test_repo/profiles/work.external.txt"
 
 printf 'ok - audit is stable, scoped, read-only, and status-aware\n'

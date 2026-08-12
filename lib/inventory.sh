@@ -27,7 +27,14 @@ apt_candidate_version() {
 }
 
 npm_inventory() {
-  output=$(npm_config_update_notifier=false npm_config_audit=false \
+  npm_cache=${SETUP_AUDIT_NPM_CACHE:-${TMPDIR:-/tmp}}
+  [ -d "$npm_cache" ] || return 2
+  output=$(npm_config_cache="$npm_cache" \
+    npm_config_logs_max=0 \
+    npm_config_update_notifier=false \
+    npm_config_audit=false \
+    npm_config_fund=false \
+    npm_config_progress=false \
     npm list --global --depth=0 --parseable 2>/dev/null)
   status=$?
   [ "$status" -eq 0 ] || return 2

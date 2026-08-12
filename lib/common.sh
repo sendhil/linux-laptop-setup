@@ -103,6 +103,8 @@ read_tool_file() {
 load_external_assumptions() {
   profile=$1
   validate_profile "$profile" || return 2
+  lines=$(read_lines "profiles/$profile.external.txt") || return 2
+  [ -n "$lines" ] || return 0
   records=$(
     while IFS= read -r line; do
       set -f
@@ -110,7 +112,7 @@ load_external_assumptions() {
       set +f
       [ "$#" -eq 2 ] && [ "$1" = command ] && validate_tool_id command "$2" || exit 2
       printf 'command\t%s\n' "$2"
-    done < <(read_lines "profiles/$profile.external.txt")
+    done <<<"$lines"
   ) || return 2
   [ -z "$records" ] || printf '%s\n' "$records" | LC_ALL=C sort -u
 }
