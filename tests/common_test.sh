@@ -43,8 +43,12 @@ unreadable_tool="$test_root/unreadable-tool.txt"
 printf 'git\n' >"$unreadable_apt"
 printf 'prettier\n' >"$unreadable_tool"
 chmod 000 "$unreadable_apt" "$unreadable_tool"
-assert_status 2 read_apt_file_quiet "$unreadable_apt"
-assert_status 2 read_tool_file_quiet npm "$unreadable_tool"
+if [ -r "$unreadable_apt" ] || [ -r "$unreadable_tool" ]; then
+  printf 'ok - unreadable manifest assertions skipped for privileged user\n'
+else
+  assert_status 2 read_apt_file_quiet "$unreadable_apt"
+  assert_status 2 read_tool_file_quiet npm "$unreadable_tool"
+fi
 chmod 600 "$unreadable_apt" "$unreadable_tool"
 
 mkdir -p "$test_root/profiles"
