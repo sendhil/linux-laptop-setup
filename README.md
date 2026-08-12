@@ -107,6 +107,24 @@ before relying on the session.
 > not change a workplace driver. Smoke-test Sway and retain GNOME as the
 > fallback; ask IT for help if the session is unreliable.
 
+## Optional container smoke test
+
+Docker is an optional local test harness for checking this repository against
+a disposable Ubuntu userspace. It does not replace the physical Sway login
+checklist, exercise graphics or session integration, or apply laptop state.
+If Docker is already installed and its daemon is available, run:
+
+```bash
+tests/container-smoke.sh
+```
+
+Pass an image name to override the default `ubuntu:24.04`, for example
+`tests/container-smoke.sh ubuntu:26.04`. The harness mounts this repository
+read-only, runs the host-independent test suite, and checks the supported
+command scripts for Bash syntax. This setup does not install or start Docker.
+If Docker is unavailable, skip the container smoke test; do not install or
+start a workplace-managed runtime for this repository.
+
 ## Recovery
 
 The annotated tag `pre-modernization-2026-08-11` points to the repository
