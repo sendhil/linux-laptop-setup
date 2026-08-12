@@ -1,0 +1,179 @@
+#!/bin/bash
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
+cd "$repo_dir" || exit 2
+
+. "$repo_dir/lib/common.sh"
+. "$repo_dir/lib/platform.sh"
+. "$repo_dir/lib/inventory.sh"
+
+if [ "$#" -ne 1 ]; then
+  printf 'usage: %s PROFILE\n' "$0" >&2
+  exit 2
+fi
+profile=$1
+
+os_release=${SETUP_OS_RELEASE:-/etc/os-release}
+load_ubuntu_info "$os_release" || exit 2
+architecture=$(detect_arch) || exit 2
+
+apt_requirements=$(load_apt_requirements "$profile") || exit 2
+npm_requirements=$(read_tool_file npm manifests/npm.txt) || exit 2
+uv_requirements=$(read_tool_file uv manifests/uv-tools.txt) || exit 2
+external_assumptions=$(load_external_assumptions "$profile") || exit 2
+
+platform=$(printf 'Ubuntu %s (%s)\nArchitecture: %s' \
+  "$UBUNTU_VERSION_ID" "$UBUNTU_VERSION_CODENAME" "$architecture")
+missing=''
+incompatible=''
+substitutions=''
+external=''
+manager_errors=''
+suggested_actions=''
+
+append_value() {
+  variable=$1
+  value=$2
+  current=${!variable}
+  printf -v "$variable" '%s' "$(append_line "$current" "$value")"
+}
+
+inventory_contains() {
+  inventory=$1
+  desired=$2
+  while IFS= read -r installed; do
+    [ "$installed" = "$desired" ] && return 0
+  done <<<"$inventory"
+  return 1
+}
+
+check_candidate_floor() {
+  package=$1
+  required=$2
+  candidate=$(apt_candidate_version "$package")
+  candidate_status=$?
+  if [ "$candidate_status" -ne 0 ]; then
+    append_value manager_errors "APT candidate inventory failed for $package"
+    return
+  fi
+  if [ -z "$candidate" ]; then
+    append_value substitutions "APT $package: no candidate meets required $required; no automatic vendor substitution configured"
+    return
+  fi
+  dpkg --compare-versions "$candidate" ge "$required"
+  comparison=$?
+  case $comparison in
+    0) : ;;
+    1)
+      append_value substitutions "APT $package: candidate $candidate is below required $required; no automatic vendor substitution configured"
+      ;;
+    *) append_value manager_errors "APT version comparison failed for $package candidate $candidate" ;;
+  esac
+}
+
+apt_ready=1
+for command_name in dpkg-query apt-cache dpkg; do
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    append_value manager_errors "APT: unavailable command $command_name"
+    apt_ready=0
+  fi
+done
+
+if [ "$apt_ready" -eq 1 ]; then
+  while IFS=$'\t' read -r package required; do
+    [ -n "$package" ] || continue
+    installed=$(apt_installed_version "$package")
+    inventory_status=$?
+    if [ "$inventory_status" -ne 0 ]; then
+      append_value manager_errors "APT inventory failed for $package"
+      continue
+    fi
+    if [ -z "$installed" ]; then
+      append_value missing "APT $package"
+      [ -z "$required" ] || check_candidate_floor "$package" "$required"
+      continue
+    fi
+    if [ -n "$required" ]; then
+      dpkg --compare-versions "$installed" ge "$required"
+      comparison=$?
+      case $comparison in
+        0) : ;;
+        1)
+          append_value incompatible "APT $package: installed $installed, requires $required"
+          check_candidate_floor "$package" "$required"
+          ;;
+        *) append_value manager_errors "APT version comparison failed for $package installed $installed" ;;
+      esac
+    fi
+  done <<<"$apt_requirements"
+fi
+
+if [ -n "$npm_requirements" ]; then
+  if ! command -v npm >/dev/null 2>&1; then
+    append_value manager_errors 'npm: unavailable (required by non-empty manifest)'
+  else
+    npm_installed=$(npm_inventory)
+    inventory_status=$?
+    if [ "$inventory_status" -ne 0 ]; then
+      append_value manager_errors 'npm inventory failed'
+    else
+      while IFS= read -r package; do
+        [ -n "$package" ] || continue
+        inventory_contains "$npm_installed" "$package" || append_value missing "npm $package"
+      done <<<"$npm_requirements"
+    fi
+  fi
+fi
+
+if [ -n "$uv_requirements" ]; then
+  if ! command -v uv >/dev/null 2>&1; then
+    append_value manager_errors 'uv: unavailable (required by non-empty manifest)'
+  else
+    uv_installed=$(uv_inventory)
+    inventory_status=$?
+    if [ "$inventory_status" -ne 0 ]; then
+      append_value manager_errors 'uv inventory failed'
+    else
+      while IFS= read -r package; do
+        [ -n "$package" ] || continue
+        inventory_contains "$uv_installed" "$package" || append_value missing "uv $package"
+      done <<<"$uv_requirements"
+    fi
+  fi
+fi
+
+while IFS=$'\t' read -r assumption_type name; do
+  [ -n "$name" ] || continue
+  if external_command_state "$name"; then
+    append_value external "$assumption_type $name: present"
+  else
+    append_value external "$assumption_type $name: missing"
+  fi
+done <<<"$external_assumptions"
+
+if [ -n "$manager_errors" ]; then
+  append_value suggested_actions 'Install or repair required inventory managers, then rerun the audit.'
+fi
+if [ -n "$missing" ] || [ -n "$incompatible" ]; then
+  append_value suggested_actions "Review drift, then run bin/apply $profile."
+fi
+if [ -n "$substitutions" ]; then
+  append_value suggested_actions 'Resolve unavailable version floors manually or adjust the manifest.'
+fi
+
+print_section 'Platform' "$platform"
+print_section 'Missing' "$missing"
+print_section 'Incompatible' "$incompatible"
+print_section 'Substitutions' "$substitutions"
+print_section 'External assumptions' "$external"
+print_section 'Manager errors' "$manager_errors"
+print_section 'Suggested actions' "$suggested_actions"
+
+if [ -n "$manager_errors" ]; then
+  exit 2
+fi
+if [ -n "$missing" ] || [ -n "$incompatible" ]; then
+  exit 1
+fi
+exit 0
