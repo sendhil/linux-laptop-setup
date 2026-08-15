@@ -51,6 +51,21 @@ workflows should use the `bin/` commands directly.
 An apply failure prints a rerun command. Fix the reported problem and rerun;
 completed work is discovered from current inventory rather than repeated.
 
+If apply exposes a pre-existing Wine dependency conflict, collect a read-only
+diagnostic before attempting any repair:
+
+```bash
+bin/audit-wine
+```
+
+The command reports dpkg state, held packages, relevant Wine and `bat` package
+policy, and an `apt-get --simulate --fix-broken` plan. It never invokes `sudo`
+or changes package state. Exit `0` means no repair action was found, exit `1`
+means the simulated plan needs review, and exit `2` means the diagnostic could
+not complete. Do not run a non-simulated repair until its proposed removals,
+installs, and upgrades have been reviewed; Wine remains outside this
+repository's ownership.
+
 ## Ownership and manifests
 
 The supported profile is assembled from small reviewed manifests:

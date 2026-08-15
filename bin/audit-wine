@@ -1,0 +1,94 @@
+#!/bin/bash
+
+if [ "$#" -ne 0 ]; then
+  printf 'usage: %s\n' "$0" >&2
+  exit 2
+fi
+
+for command_name in dpkg apt-mark apt-cache apt-get grep; do
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    printf 'error: unavailable command: %s\n' "$command_name" >&2
+    exit 2
+  fi
+done
+
+printf 'Wine/APT diagnostic (read-only)\n'
+printf 'No packages will be installed, removed, upgraded, or repaired.\n\n'
+
+native_architecture=$(dpkg --print-architecture 2>&1)
+native_status=$?
+foreign_architectures=$(dpkg --print-foreign-architectures 2>&1)
+foreign_status=$?
+if [ "$native_status" -ne 0 ] || [ "$foreign_status" -ne 0 ]; then
+  printf 'error: failed to inspect dpkg architectures\n' >&2
+  exit 2
+fi
+
+printf 'Architectures\n'
+printf '  native: %s\n' "$native_architecture"
+if [ -n "$foreign_architectures" ]; then
+  while IFS= read -r architecture; do
+    printf '  foreign: %s\n' "$architecture"
+  done <<<"$foreign_architectures"
+else
+  printf '  foreign: (none)\n'
+fi
+
+dpkg_audit=$(dpkg --audit 2>&1)
+dpkg_status=$?
+printf '\ndpkg audit\n'
+if [ -n "$dpkg_audit" ]; then
+  printf '%s\n' "$dpkg_audit"
+else
+  printf '  (none)\n'
+fi
+if [ "$dpkg_status" -ne 0 ]; then
+  printf '\nerror: dpkg audit failed\n' >&2
+  exit 2
+fi
+
+held_packages=$(apt-mark showhold 2>&1)
+held_status=$?
+printf '\nHeld packages\n'
+if [ -n "$held_packages" ]; then
+  printf '%s\n' "$held_packages"
+else
+  printf '  (none)\n'
+fi
+if [ "$held_status" -ne 0 ]; then
+  printf '\nerror: failed to inspect held packages\n' >&2
+  exit 2
+fi
+
+printf '\nPackage policy\n'
+apt-cache policy \
+  winehq-stable \
+  wine-stable \
+  wine-stable-amd64 \
+  wine-stable-i386:i386 \
+  bat \
+  libgit2-1.1
+policy_status=$?
+if [ "$policy_status" -ne 0 ]; then
+  printf '\nerror: failed to inspect package policy\n' >&2
+  exit 2
+fi
+
+repair_simulation=$(apt-get -s --fix-broken install 2>&1)
+simulation_status=$?
+printf '\nAPT repair simulation\n'
+printf '%s\n' "$repair_simulation"
+if [ "$simulation_status" -ne 0 ]; then
+  printf '\nAssessment\n'
+  printf '  APT could not calculate a repair. Do not run a real repair; ask IT to review this output.\n'
+  exit 2
+fi
+
+printf '\nAssessment\n'
+if [ -n "$dpkg_audit" ] || printf '%s\n' "$repair_simulation" | grep -Eq '^(Inst|Remv|Conf) '; then
+  printf '  Package repair actions are proposed. Review them before running any non-simulated command.\n'
+  exit 1
+fi
+
+printf '  No broken dpkg state or proposed APT repair actions were detected.\n'
+exit 0
