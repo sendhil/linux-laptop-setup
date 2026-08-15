@@ -38,10 +38,12 @@ for required_text in \
   'Name=Sway (NVIDIA test)' \
   'Exec=/usr/bin/sway --unsupported-gpu' \
   'TryExec=/usr/bin/sway' \
-  'Type=Application' \
-  'DesktopNames=sway;'; do
+  'Type=Application'; do
   assert_contains "$session_text" "$required_text" "session asset contains required field: $required_text"
 done
+case $session_text in
+  *DesktopNames=*) fail 'session asset uses the Jammy-incompatible DesktopNames key' ;;
+esac
 if command -v desktop-file-validate >/dev/null 2>&1; then
   desktop-file-validate "$session_asset" || fail 'tracked Sway NVIDIA desktop entry validates'
 fi

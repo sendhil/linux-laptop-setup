@@ -4,4 +4,3 @@ Comment=Sway with the proprietary NVIDIA compatibility flag
 Exec=/usr/bin/sway --unsupported-gpu
 TryExec=/usr/bin/sway
 Type=Application
-DesktopNames=sway;
