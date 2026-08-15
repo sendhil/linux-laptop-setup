@@ -10,7 +10,10 @@ Before logging in:
 - [ ] Run `bin/audit work` and confirm the owned manifests are converged.
 - [ ] Run `bin/doctor work` from GNOME or a terminal and review every warning.
 - [ ] If a proprietary NVIDIA driver is detected, do not change it; plan a
-  short Sway smoke test and be ready to select GNOME again in GDM.
+  short Sway smoke test and be ready to select GNOME again in GDM. On Ubuntu
+  22.04, validate the Sway config with `sway --unsupported-gpu --validate -c
+  ~/.config/sway/config`, then run `bin/install-sway-nvidia-session` and select
+  **Sway (NVIDIA test)** rather than modifying the standard session.
 - [ ] Run `make preflight-ubuntu` and `make stow-ubuntu` from the separate
   cross-platform dotfiles checkout.
 

@@ -1,0 +1,77 @@
+#!/bin/bash
+
+if [ "$#" -ne 0 ]; then
+  printf 'usage: %s\n' "$0" >&2
+  exit 2
+fi
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
+cd "$repo_dir" || exit 2
+
+. "$repo_dir/lib/platform.sh"
+
+configuration_error() {
+  printf 'error: %s\n' "$1" >&2
+  exit 2
+}
+
+install_error() {
+  printf 'error: failed to install the Sway NVIDIA session: %s\n' "$1" >&2
+  printf 'rerun: bin/install-sway-nvidia-session\n' >&2
+  exit 1
+}
+
+os_release=${SETUP_OS_RELEASE:-/etc/os-release}
+load_ubuntu_info "$os_release" || exit 2
+
+for command_name in cmp desktop-file-validate grep install sudo; do
+  command -v "$command_name" >/dev/null 2>&1 || \
+    configuration_error "unavailable command: $command_name"
+done
+
+[ -x /usr/bin/sway ] || configuration_error 'Sway is unavailable: /usr/bin/sway'
+[ -r /proc/modules ] || configuration_error 'cannot inspect loaded kernel modules: /proc/modules'
+if ! grep -Eq '^nvidia(_[^[:space:]]*)?[[:space:]]' /proc/modules; then
+  configuration_error 'proprietary NVIDIA driver is not loaded; use the standard Sway session'
+fi
+
+config_home=${XDG_CONFIG_HOME:-$HOME/.config}
+case $config_home in
+  /*) : ;;
+  *) config_home=$HOME/.config ;;
+esac
+sway_config=$config_home/sway/config
+[ -r "$sway_config" ] || configuration_error "cannot read Sway config: $sway_config"
+/usr/bin/sway --unsupported-gpu --validate -c "$sway_config" || \
+  configuration_error "Sway config validation failed: $sway_config"
+
+session_dir=/usr/share/wayland-sessions
+session_target=$session_dir/sway-nvidia.desktop
+session_source=$repo_dir/assets/sway-nvidia.desktop
+[ -d "$session_dir" ] || configuration_error "GDM Wayland session directory is unavailable: $session_dir"
+[ -r "$session_source" ] || configuration_error "cannot read session asset: $session_source"
+desktop-file-validate "$session_source" || configuration_error 'tracked desktop entry is invalid'
+
+if [ -e "$session_target" ]; then
+  if cmp -s -- "$session_source" "$session_target"; then
+    printf 'Sway NVIDIA session already installed: %s\n' "$session_target"
+    exit 0
+  fi
+  configuration_error "refusing to overwrite differing session file: $session_target"
+fi
+
+if ! sudo -v; then
+  configuration_error 'sudo authorization is required to install the GDM session entry'
+fi
+
+# All platform, dependency, hardware, generated-file, conflict, and privilege
+# checks complete before the single additive system mutation below.
+sudo install -o root -g root -m 0644 -- "$session_source" "$session_target" || \
+  install_error "$session_target"
+
+cmp -s -- "$session_source" "$session_target" || install_error 'installed file verification'
+desktop-file-validate "$session_target" || install_error 'installed desktop entry validation'
+
+printf 'Sway NVIDIA session installed: %s\n' "$session_target"
+printf 'Log out, select "Sway (NVIDIA test)" in GDM, and keep GNOME available as the fallback.\n'

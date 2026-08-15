@@ -92,7 +92,7 @@ assert_contains "$smoke_call" '</repo>' 'container smoke works from the mounted 
 assert_contains "$smoke_call" '<example.invalid/ubuntu:test>' 'container smoke accepts an optional image'
 assert_contains "$smoke_call" 'bash tests/run' 'container smoke runs the repository test suite'
 assert_contains "$smoke_call" \
-  'apt-get install -y bash coreutils findutils git grep libdigest-sha-perl python3 sed' \
+  'apt-get install -y bash coreutils desktop-file-utils findutils git grep libdigest-sha-perl python3 sed' \
   'container smoke installs the complete test-suite prerequisites'
 assert_contains "$smoke_call" 'GIT_CONFIG_COUNT=1' \
   'container smoke scopes a Git configuration entry to the container process'
@@ -100,7 +100,7 @@ assert_contains "$smoke_call" 'GIT_CONFIG_KEY_0=safe.directory' \
   'container smoke declares the Git safe-directory key without writing config'
 assert_contains "$smoke_call" 'GIT_CONFIG_VALUE_0=/repo' \
   'container smoke marks only the mounted repository safe'
-assert_contains "$smoke_call" 'bash -n bin/bootstrap bin/audit bin/apply bin/doctor' \
+assert_contains "$smoke_call" 'bash -n bin/bootstrap bin/audit bin/apply bin/doctor bin/audit-wine bin/install-sway-nvidia-session' \
   'container smoke checks supported command syntax'
 case $smoke_call in
   *'bin/apply work'*) fail 'container smoke applies laptop state' ;;

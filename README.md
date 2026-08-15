@@ -47,6 +47,7 @@ workflows should use the `bin/` commands directly.
 | `bin/audit work` | declared state is converged | missing or incompatible declared software | invalid configuration or unavailable/broken inventory manager |
 | `bin/apply work` | plan applied or already converged | a package/tool installation failed | usage, manifest, platform, inventory, candidate, or privilege preflight error |
 | `bin/doctor work` | no owned operational check failed | one or more owned operational checks failed | usage, manifest, or platform configuration error |
+| `bin/install-sway-nvidia-session` | separate GDM session installed or already present | session installation or verification failed | usage, platform, dependency, hardware, conflict, or privilege error |
 
 An apply failure prints a rerun command. Fix the reported problem and rerun;
 completed work is discovered from current inventory rather than repeated.
@@ -121,6 +122,22 @@ before relying on the session.
 > `bin/doctor work` prints a prominent warning when it detects that driver. Do
 > not change a workplace driver. Smoke-test Sway and retain GNOME as the
 > fallback; ask IT for help if the session is unreliable.
+
+Ubuntu 22.04's Sway package refuses to start with the proprietary NVIDIA
+driver unless the unsupported-GPU flag is explicitly enabled. After the normal
+Sway configuration validates, install a separate, clearly labeled GDM test
+session with:
+
+```bash
+bin/install-sway-nvidia-session
+```
+
+The command is Ubuntu-only and opt-in. It requires a loaded proprietary NVIDIA
+module and an installed `/usr/bin/sway`, validates the tracked desktop entry,
+and uses `sudo` only to add
+`/usr/share/wayland-sessions/sway-nvidia.desktop`. It never changes the standard
+Sway session or graphics driver, refuses to overwrite a differing file, and is
+safe to rerun. Select **Sway (NVIDIA test)** in GDM and keep GNOME available.
 
 ## Optional container smoke test
 

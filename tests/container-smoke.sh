@@ -39,10 +39,10 @@ docker run --rm \
   "$image" \
   bash -lc '
     apt-get update >/dev/null
-    apt-get install -y bash coreutils findutils git grep libdigest-sha-perl python3 sed >/dev/null
+    apt-get install -y bash coreutils desktop-file-utils findutils git grep libdigest-sha-perl python3 sed >/dev/null
     export GIT_CONFIG_COUNT=1
     export GIT_CONFIG_KEY_0=safe.directory
     export GIT_CONFIG_VALUE_0=/repo
     bash tests/run
-    bash -n bin/bootstrap bin/audit bin/apply bin/doctor
+    bash -n bin/bootstrap bin/audit bin/apply bin/doctor bin/audit-wine bin/install-sway-nvidia-session
   '
