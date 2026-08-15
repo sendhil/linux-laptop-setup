@@ -10,15 +10,27 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 test_repo="$tmp_dir/repository"
 fake_bin="$tmp_dir/fake-bin"
+host_bin="$tmp_dir/host-bin"
 safe_bin="$tmp_dir/safe-bin"
 state_dir="$tmp_dir/state"
 call_log="$tmp_dir/calls.log"
-mkdir -p "$test_repo" "$fake_bin" "$safe_bin" "$state_dir"
+mkdir -p "$test_repo" "$fake_bin" "$host_bin" "$safe_bin" "$state_dir"
 cp -R "$repo_dir"/. "$test_repo"/
 
-for command_name in awk dirname grep paste sed; do
+for command_name in awk cat dirname grep paste sed; do
   ln -s "$(command -v "$command_name")" "$safe_bin/$command_name"
 done
+
+# Model an Ubuntu host where a real apt-get remains later on PATH. Tests that
+# exercise an absent package manager must isolate themselves from this layer.
+cat >"$host_bin/apt-get" <<'EOF'
+#!/bin/bash
+printf 'host apt-get' >>"$FAKE_CALL_LOG"
+printf ' <%s>' "$@" >>"$FAKE_CALL_LOG"
+printf '\n' >>"$FAKE_CALL_LOG"
+exit 98
+EOF
+chmod +x "$host_bin/apt-get"
 
 ubuntu_release="$tmp_dir/ubuntu-os-release"
 cat >"$ubuntu_release" <<'EOF'
@@ -106,7 +118,7 @@ run_bootstrap() {
   : >"$call_log"
   set +e
   bootstrap_output=$(cd "$test_repo" && env \
-    PATH="${BOOTSTRAP_PATH:-$fake_bin:/usr/bin:/bin}" \
+    PATH="${BOOTSTRAP_PATH:-$fake_bin:$host_bin:$safe_bin}" \
     SETUP_OS_RELEASE="${SETUP_OS_RELEASE:-$ubuntu_release}" \
     SETUP_SUDO_COMMAND="${SETUP_SUDO_COMMAND:-}" \
     FAKE_STATE_DIR="$state_dir" \
@@ -224,7 +236,7 @@ mv "$fake_bin/sudo.saved" "$fake_bin/sudo"
 
 : >"$state_dir/apt"
 mv "$fake_bin/apt-get" "$fake_bin/apt-get.saved"
-run_bootstrap
+BOOTSTRAP_PATH="$fake_bin:$safe_bin" run_bootstrap
 assert_eq 2 "$bootstrap_status" 'missing APT is rejected before mutation'
 assert_no_mutation 'the complete mutation preflight checks APT availability'
 mv "$fake_bin/apt-get.saved" "$fake_bin/apt-get"
