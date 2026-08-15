@@ -17,6 +17,7 @@ Clone this repository on the laptop and run these commands from its root:
 
 ```bash
 bin/bootstrap
+bin/install-wezterm
 bin/audit work
 bin/apply work
 bin/audit work
@@ -26,6 +27,15 @@ bin/doctor work
 `bin/bootstrap` detects Ubuntu, architecture, and visible graphics hardware,
 then installs only Git and CA certificates when they are missing. It may ask
 for `sudo`; it never downloads or executes an installer script.
+
+`bin/install-wezterm` is the explicit exception to the Ubuntu-first package
+source policy. It verifies and configures WezTerm's official signed Apt Fury
+repository, installs the `wezterm` package through APT, and installs the pinned
+`JetBrainsMono Nerd Font Mono` release under the current user's XDG data
+directory. It stages and verifies the signing-key fingerprint, font checksum,
+and archive contents before mutation; it never executes downloaded shell code.
+The command is conflict-safe, idempotent, and must be run before the first
+audit because `wezterm` is a declared common package.
 
 The first `bin/audit work` is read-only. On a clean laptop it normally reports
 drift and exits `1`. Review that report and the manifests before running
@@ -44,6 +54,7 @@ workflows should use the `bin/` commands directly.
 | Command | `0` | `1` | `2` |
 | --- | --- | --- | --- |
 | `bin/bootstrap` | prerequisites are ready | prerequisite installation failed | usage, platform, inventory, or privilege prerequisite error |
+| `bin/install-wezterm` | official repository, package, and font are ready | download, package, font, or verification failed | usage, platform, dependency, conflict, architecture, or privilege error |
 | `bin/audit work` | declared state is converged | missing or incompatible declared software | invalid configuration or unavailable/broken inventory manager |
 | `bin/apply work` | plan applied or already converged | a package/tool installation failed | usage, manifest, platform, inventory, candidate, or privilege preflight error |
 | `bin/doctor work` | no owned operational check failed | one or more owned operational checks failed | usage, manifest, or platform configuration error |
@@ -71,7 +82,8 @@ repository's ownership.
 
 The supported profile is assembled from small reviewed manifests:
 
-- `manifests/apt-common.txt` owns shared command-line and development packages.
+- `manifests/apt-common.txt` owns shared command-line and development packages,
+  including WezTerm after `bin/install-wezterm` configures its reviewed source.
 - `manifests/apt-sway.txt` owns the Sway session and laptop integration packages.
 - `profiles/work.apt.txt` is reserved for workplace-specific APT packages this
   repository has explicitly agreed to own.
@@ -88,10 +100,11 @@ external ownership.
 
 Package-source policy is deliberately conservative: prefer Ubuntu packages
 for system and desktop integration; use npm or uv only for reviewed manifests;
-do not add a PPA, vendor repository, or source build silently. If Ubuntu cannot
-meet a declared version floor, audit reports the incompatibility and apply
-stops before mutation. Resolve that case explicitly with IT or update the
-reviewed manifest.
+do not add a PPA, vendor repository, or source build silently. The only
+supported vendor repository is the official signed WezTerm source configured
+by the explicit `bin/install-wezterm` command. If Ubuntu cannot meet a declared
+version floor, audit reports the incompatibility and apply stops before
+mutation. Resolve that case explicitly with IT or update the reviewed manifest.
 
 ## Dotfiles handoff
 

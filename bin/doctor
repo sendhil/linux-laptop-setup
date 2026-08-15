@@ -88,6 +88,23 @@ check_fd_command() {
   fi
 }
 
+check_wezterm_font() {
+  font_family='JetBrainsMono Nerd Font Mono'
+  if ! command -v fc-match >/dev/null 2>&1; then
+    fail_check "font: $font_family (fc-match unavailable)"
+    return
+  fi
+  matched_family=$(fc-match --format '%{family}\n' "$font_family" 2>/dev/null) || {
+    fail_check "font: $font_family"
+    return
+  }
+  if printf '%s\n' "$matched_family" | grep -Fq -- "$font_family"; then
+    pass "font: $font_family"
+  else
+    fail_check "font: $font_family"
+  fi
+}
+
 check_external() {
   if command -v "$1" >/dev/null 2>&1; then
     pass "external command: $1"
@@ -200,6 +217,10 @@ while IFS=$'\t' read -r package _required; do
     wl-clipboard)
       check_command wl-copy
       check_command wl-paste
+      ;;
+    wezterm)
+      check_command wezterm
+      check_wezterm_font
       ;;
     xwayland) check_command Xwayland ;;
   esac

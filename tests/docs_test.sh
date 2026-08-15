@@ -10,6 +10,7 @@ cd "$repo_dir"
 readme=$(cat README.md)
 for required_text in \
   'bin/bootstrap' \
+  'bin/install-wezterm' \
   'bin/audit work' \
   'bin/apply work' \
   'bin/doctor work' \
@@ -100,7 +101,7 @@ assert_contains "$smoke_call" 'GIT_CONFIG_KEY_0=safe.directory' \
   'container smoke declares the Git safe-directory key without writing config'
 assert_contains "$smoke_call" 'GIT_CONFIG_VALUE_0=/repo' \
   'container smoke marks only the mounted repository safe'
-assert_contains "$smoke_call" 'bash -n bin/bootstrap bin/audit bin/apply bin/doctor bin/audit-wine bin/install-sway-nvidia-session' \
+assert_contains "$smoke_call" 'bash -n bin/bootstrap bin/audit bin/apply bin/doctor bin/audit-wine bin/install-sway-nvidia-session bin/install-wezterm' \
   'container smoke checks supported command syntax'
 case $smoke_call in
   *'bin/apply work'*) fail 'container smoke applies laptop state' ;;
@@ -140,5 +141,7 @@ assert_contains "$smoke_skip_output" 'SKIP' 'container smoke reports an unavaila
 assert_contains "$readme" 'optional local test harness' 'README scopes Docker to local testing'
 assert_contains "$readme" 'does not install or start Docker' 'README forbids Docker lifecycle changes'
 assert_contains "$readme" 'skip' 'README documents unavailable Docker behavior'
+assert_contains "$readme" 'JetBrainsMono Nerd Font Mono' \
+  'README documents the exact WezTerm font family owned by setup'
 
 printf 'ok - supported workflow documentation\n'

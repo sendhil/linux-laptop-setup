@@ -1,0 +1,269 @@
+#!/bin/bash
+
+if [ "$#" -ne 0 ]; then
+  printf 'usage: %s\n' "$0" >&2
+  exit 2
+fi
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
+cd "$repo_dir" || exit 2
+
+. "$repo_dir/lib/platform.sh"
+
+configuration_error() {
+  printf 'error: %s\n' "$1" >&2
+  exit 2
+}
+
+install_error() {
+  printf 'error: failed to install WezTerm prerequisites: %s\n' "$1" >&2
+  printf 'rerun: bin/install-wezterm\n' >&2
+  exit 1
+}
+
+key_url=https://apt.fury.io/wez/gpg.key
+key_fingerprint=EAB6DB20B1C8C3A5DB4B6AD08FC75FD3EB56E90B
+font_url=https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.0/JetBrainsMono.tar.xz
+font_sha256=0227b220360a6f819b9ead92343e8112b34733054782561af50cfba1e8afab63
+font_family='JetBrainsMono Nerd Font Mono'
+keyring=/usr/share/keyrings/wezterm-fury.gpg
+source_list=/etc/apt/sources.list.d/wezterm.list
+source_asset=$repo_dir/assets/wezterm-fury.list
+
+os_release=${SETUP_OS_RELEASE:-/etc/os-release}
+load_ubuntu_info "$os_release" || exit 2
+architecture=$(detect_arch) || exit 2
+case $architecture in
+  amd64|arm64) : ;;
+  *) configuration_error "unsupported architecture for WezTerm: $architecture" ;;
+esac
+
+[ "$(id -u)" -ne 0 ] || \
+  configuration_error 'run this installer as your normal user, not as root'
+
+for command_name in apt-get awk basename cat cmp curl dpkg-query fc-cache fc-match \
+  fc-scan find gpg grep id install mkdir mktemp mv rm sha256sum sudo tar; do
+  command -v "$command_name" >/dev/null 2>&1 || \
+    configuration_error "unavailable command: $command_name"
+done
+[ -r "$source_asset" ] || configuration_error "cannot read APT source asset: $source_asset"
+
+case ${HOME:-} in
+  /*) : ;;
+  *) configuration_error 'HOME must be an absolute path' ;;
+esac
+data_home=${XDG_DATA_HOME:-$HOME/.local/share}
+case $data_home in
+  /*) : ;;
+  *) data_home=$HOME/.local/share ;;
+esac
+case $data_home in
+  *$'\n'*|*$'\r'*) configuration_error 'invalid user data directory' ;;
+esac
+font_root=$data_home/fonts
+font_target=$font_root/JetBrainsMonoNerdFont-3.5.0
+font_marker=$font_target/.setup-source
+expected_marker=$(printf '%s\n%s\n' "$font_url" "$font_sha256")
+
+[ ! -L "$source_list" ] || \
+  configuration_error "refusing to overwrite differing APT source: $source_list"
+if [ -e "$source_list" ] && ! cmp -s -- "$source_asset" "$source_list"; then
+  configuration_error "refusing to overwrite differing APT source: $source_list"
+fi
+
+read_key_fingerprint() {
+  gpg --batch --show-keys --with-colons "$1" 2>/dev/null |
+    awk -F: '$1 == "fpr" { print $10; exit }'
+}
+
+key_ready=0
+[ ! -L "$keyring" ] || \
+  configuration_error "refusing to overwrite differing keyring: $keyring"
+if [ -e "$keyring" ]; then
+  installed_fingerprint=$(read_key_fingerprint "$keyring") || \
+    configuration_error "cannot inspect existing keyring: $keyring"
+  [ "$installed_fingerprint" = "$key_fingerprint" ] || \
+    configuration_error "refusing to overwrite differing keyring: $keyring"
+  key_ready=1
+fi
+
+font_target_has_family() {
+  found_font=0
+  while IFS= read -r -d '' font_file; do
+    if fc-scan --format '%{family}\n' "$font_file" 2>/dev/null |
+      grep -Fq -- "$font_family"; then
+      found_font=1
+      break
+    fi
+  done < <(find "$font_target" -type f -name '*.ttf' -print0 2>/dev/null)
+  [ "$found_font" -eq 1 ]
+}
+
+font_ready=0
+[ ! -L "$font_target" ] || \
+  configuration_error "refusing to overwrite differing font directory: $font_target"
+if [ -e "$font_target" ]; then
+  [ -d "$font_target" ] || \
+    configuration_error "refusing to overwrite non-directory font target: $font_target"
+  actual_marker=$(cat "$font_marker" 2>/dev/null || true)
+  [ "$actual_marker" = "$expected_marker" ] && font_target_has_family || \
+    configuration_error "refusing to overwrite differing font directory: $font_target"
+  font_ready=1
+fi
+
+font_parent=''
+if [ "$font_ready" -eq 0 ]; then
+  font_parent=$font_root
+  while [ ! -e "$font_parent" ]; do
+    next_parent=${font_parent%/*}
+    [ -n "$next_parent" ] && [ "$next_parent" != "$font_parent" ] || \
+      configuration_error "cannot resolve font directory parent: $font_root"
+    font_parent=$next_parent
+  done
+  [ -d "$font_parent" ] && [ -w "$font_parent" ] && [ -x "$font_parent" ] || \
+    configuration_error "font directory parent is not writable: $font_parent"
+fi
+
+wezterm_ready=0
+package_state=$(dpkg-query -W -f='${db:Status-Abbrev}' wezterm 2>/dev/null || true)
+case $package_state in
+  ii*)
+    [ -x /usr/bin/wezterm ] || \
+      configuration_error 'WezTerm package is installed but /usr/bin/wezterm is unavailable'
+    wezterm_ready=1
+    ;;
+esac
+
+if [ -e "$source_list" ] && [ "$key_ready" -eq 1 ] && \
+  [ "$font_ready" -eq 1 ] && [ "$wezterm_ready" -eq 1 ]; then
+  fc-cache -f "$font_root" >/dev/null 2>&1 || install_error 'font cache refresh'
+  matched_family=$(fc-match --format '%{family}\n' "$font_family" 2>/dev/null) || \
+    install_error 'font verification'
+  printf '%s\n' "$matched_family" | grep -Fq -- "$font_family" || \
+    install_error "font verification: $font_family"
+  printf 'WezTerm and %s are already installed.\n' "$font_family"
+  exit 0
+fi
+
+tmp_dir=$(mktemp -d) || install_error 'temporary staging directory'
+user_font_stage=''
+cleanup() {
+  [ -z "$user_font_stage" ] || rm -rf -- "$user_font_stage"
+  rm -rf -- "$tmp_dir"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+key_binary=$tmp_dir/wezterm-fury.gpg
+if [ "$key_ready" -eq 0 ]; then
+  key_ascii=$tmp_dir/wezterm-fury.asc
+  curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+    --output "$key_ascii" "$key_url" || install_error 'repository signing key download'
+  downloaded_fingerprint=$(read_key_fingerprint "$key_ascii") || \
+    install_error 'repository signing key inspection'
+  [ "$downloaded_fingerprint" = "$key_fingerprint" ] || \
+    install_error "repository signing key fingerprint: $downloaded_fingerprint"
+  gpg --batch --yes --dearmor --output "$key_binary" "$key_ascii" || \
+    install_error 'repository signing key conversion'
+fi
+
+font_extract=$tmp_dir/font-extract
+if [ "$font_ready" -eq 0 ]; then
+  font_archive=$tmp_dir/JetBrainsMono.tar.xz
+  curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+    --output "$font_archive" "$font_url" || install_error 'Nerd Font download'
+  printf '%s  %s\n' "$font_sha256" "$font_archive" |
+    sha256sum --check --status || install_error 'Nerd Font checksum'
+
+  archive_members=$(tar -tJf "$font_archive") || install_error 'Nerd Font archive listing'
+  [ -n "$archive_members" ] || install_error 'empty Nerd Font archive'
+  while IFS= read -r archive_member; do
+    case /$archive_member/ in
+      *'/../'*|*'/./'*|//*|*$'\n'*|*$'\r'*) install_error 'unsafe Nerd Font archive path' ;;
+    esac
+  done <<<"$archive_members"
+
+  mkdir -p "$font_extract" || install_error 'Nerd Font staging directory'
+  tar -xJf "$font_archive" -C "$font_extract" --no-same-owner --no-same-permissions || \
+    install_error 'Nerd Font extraction'
+
+  font_names=$tmp_dir/font-names
+  : >"$font_names"
+  staged_font_count=0
+  staged_family=0
+  while IFS= read -r -d '' font_file; do
+    font_name=$(basename -- "$font_file")
+    case $font_name in
+      *$'\n'*|*$'\r'*) install_error 'unsafe Nerd Font filename' ;;
+    esac
+    if grep -Fxq -- "$font_name" "$font_names"; then
+      install_error "duplicate font archive member: $font_name"
+    fi
+    printf '%s\n' "$font_name" >>"$font_names" || install_error 'font name inventory'
+    staged_font_count=$((staged_font_count + 1))
+    scanned_families=$(fc-scan --format '%{family}\n' "$font_file" 2>/dev/null) || \
+      install_error "invalid font file: $font_name"
+    if printf '%s\n' "$scanned_families" | grep -Fq -- "$font_family"; then
+      staged_family=1
+    fi
+  done < <(find "$font_extract" -type f -name '*.ttf' -print0)
+  [ "$staged_font_count" -gt 0 ] || install_error 'archive contains no TrueType fonts'
+  [ "$staged_family" -eq 1 ] || install_error "archive lacks font family: $font_family"
+fi
+
+# All platform, dependency, target-conflict, download, fingerprint, checksum,
+# and archive checks complete before privilege authorization or mutation.
+system_change=0
+[ -e "$source_list" ] || system_change=1
+[ "$key_ready" -eq 1 ] || system_change=1
+[ "$wezterm_ready" -eq 1 ] || system_change=1
+if [ "$system_change" -eq 1 ]; then
+  if ! sudo -v; then
+    configuration_error 'sudo authorization is required to install the WezTerm repository and package'
+  fi
+
+  if [ "$key_ready" -eq 0 ]; then
+    sudo install -o root -g root -m 0644 -- "$key_binary" "$keyring" || \
+      install_error "keyring: $keyring"
+  fi
+  if [ ! -e "$source_list" ]; then
+    sudo install -o root -g root -m 0644 -- "$source_asset" "$source_list" || \
+      install_error "APT source: $source_list"
+  fi
+  sudo apt-get update || install_error 'APT metadata'
+  if [ "$wezterm_ready" -eq 0 ]; then
+    sudo apt-get install -y --no-install-recommends -- wezterm || \
+      install_error 'APT package: wezterm'
+  fi
+fi
+
+if [ "$font_ready" -eq 0 ]; then
+  install -d -m 0755 -- "$font_root" || install_error "font directory: $font_root"
+  user_font_stage=$(mktemp -d "$font_root/.JetBrainsMonoNerdFont-3.5.0.XXXXXX") || \
+    install_error 'user font staging directory'
+  while IFS= read -r -d '' font_file; do
+    font_name=$(basename -- "$font_file")
+    [ ! -e "$user_font_stage/$font_name" ] || \
+      install_error "duplicate font archive member: $font_name"
+    install -m 0644 -- "$font_file" "$user_font_stage/$font_name" || \
+      install_error "font file: $font_name"
+  done < <(find "$font_extract" -type f -name '*.ttf' -print0)
+  printf '%s\n' "$expected_marker" >"$user_font_stage/.setup-source" || \
+    install_error 'font source marker'
+  mv -- "$user_font_stage" "$font_target" || install_error "font target: $font_target"
+  user_font_stage=''
+fi
+
+[ -x /usr/bin/wezterm ] || install_error 'WezTerm executable verification'
+fc-cache -f "$font_root" >/dev/null 2>&1 || install_error 'font cache refresh'
+matched_family=$(fc-match --format '%{family}\n' "$font_family" 2>/dev/null) || \
+  install_error 'font verification'
+printf '%s\n' "$matched_family" | grep -Fq -- "$font_family" || \
+  install_error "font verification: $font_family"
+
+printf 'WezTerm installed from the official signed repository.\n'
+printf 'Font installed: %s\n' "$font_family"
+printf 'Next: bin/audit work\n'

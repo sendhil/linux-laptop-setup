@@ -7,6 +7,8 @@ workflow has been exercised.
 
 Before logging in:
 
+- [ ] Run `bin/install-wezterm` and confirm the exact
+  `JetBrainsMono Nerd Font Mono` family resolves with `fc-match`.
 - [ ] Run `bin/audit work` and confirm the owned manifests are converged.
 - [ ] Run `bin/doctor work` from GNOME or a terminal and review every warning.
 - [ ] If a proprietary NVIDIA driver is detected, do not change it; plan a
@@ -21,7 +23,7 @@ Choose Sway from GDM's session menu, then verify:
 
 - [ ] Sway reaches a stable desktop and logout returns to GDM.
 - [ ] GNOME can still be selected and reaches a stable desktop.
-- [ ] `Alt+Enter` opens the terminal and `Alt+d` opens the application launcher.
+- [ ] `Alt+Enter` opens WezTerm and `Alt+Space` opens the application launcher.
 - [ ] Mirrored focus, move, resize, fullscreen, scratchpad, monitor, and
   workspace 1–20 bindings behave as documented by the dotfiles repository.
 - [ ] Built-in and attached displays use the expected resolution, scale,

@@ -28,6 +28,7 @@ shellcheck
 stow
 tmux
 tree
+wezterm
 zoxide
 zsh
 EOF

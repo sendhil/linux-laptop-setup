@@ -75,7 +75,7 @@ VERSION_ID="24.04"
 VERSION_CODENAME=noble
 EOF
 
-owned_commands='bash batcat blueman-applet brightnessctl curl direnv fzf git grim jq kitty mako make nm-applet notify-send nvim pipx pipewire playerctl python3 rg shellcheck slurp stow sway swayidle swaylock tmux tree waybar wireplumber wl-copy wl-paste wofi Xwayland zoxide zsh'
+owned_commands='bash batcat blueman-applet brightnessctl curl direnv fc-match fzf git grim jq kitty mako make nm-applet notify-send nvim pipx pipewire playerctl python3 rg shellcheck slurp stow sway swayidle swaylock tmux tree waybar wezterm wireplumber wl-copy wl-paste wofi Xwayland zoxide zsh'
 external_commands='docker kubectl zoom'
 
 make_success_command() {
@@ -86,6 +86,10 @@ printf '%s' "${0##*/}" >>"$FAKE_CALL_LOG"
 printf ' <%s>' "$@" >>"$FAKE_CALL_LOG"
 printf '\n' >>"$FAKE_CALL_LOG"
 case ${0##*/} in
+  fc-match)
+    printf '%s\n' "${FAKE_FONT_FAMILY:-JetBrainsMono Nerd Font Mono}"
+    exit 0
+    ;;
   zsh)
     if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
       trap '' TERM
@@ -221,6 +225,7 @@ run_doctor() {
     SWAYSOCK="${SWAYSOCK:-}" \
     XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-}" \
     FAKE_CALL_LOG="$call_log" \
+    FAKE_FONT_FAMILY="${FAKE_FONT_FAMILY:-JetBrainsMono Nerd Font Mono}" \
     FAKE_INACTIVE_SERVICE="${FAKE_INACTIVE_SERVICE:-}" \
     FAKE_LSMOD_OUTPUT="${FAKE_LSMOD_OUTPUT:-}" \
     FAKE_NVIDIA_HARD_TIMEOUT="${FAKE_NVIDIA_HARD_TIMEOUT:-0}" \
@@ -272,6 +277,9 @@ run_doctor
 assert_eq 0 "$doctor_status" 'healthy owned commands succeed despite missing external software'
 assert_contains "$doctor_output" 'PASS command: nvim' 'owned Neovim command passes'
 assert_contains "$doctor_output" 'PASS command: wofi' 'owned Wofi command passes'
+assert_contains "$doctor_output" 'PASS command: wezterm' 'owned WezTerm command passes'
+assert_contains "$doctor_output" 'PASS font: JetBrainsMono Nerd Font Mono' \
+  'the exact WezTerm Nerd Font family passes'
 case $doctor_output in
   *'command: fuzzel'*) fail 'doctor still checks unavailable Fuzzel' ;;
 esac
@@ -282,6 +290,11 @@ assert_contains "$doctor_output" 'PASS shell startup: bash' 'Bash startup is che
 assert_contains "$doctor_output" 'PASS shell startup: zsh' 'Zsh startup is checked'
 assert_contains "$doctor_output" 'Summary: PASS ' 'doctor prints result accounting'
 assert_contains "$doctor_output" ' WARN 1 SKIP 1 FAIL 0' 'warnings and skips do not count as failures'
+
+FAKE_FONT_FAMILY='DejaVu Sans Mono' run_doctor
+assert_eq 1 "$doctor_status" 'a fallback font fails the owned WezTerm font check'
+assert_contains "$doctor_output" 'FAIL font: JetBrainsMono Nerd Font Mono' \
+  'the missing exact WezTerm font family is identified'
 assert_contains "$(cat "$call_log")" 'timeout <-k> <2> <10> <bash> <-lic> <exit>' 'Bash startup has a two-second hard-kill grace period'
 assert_contains "$(cat "$call_log")" 'timeout <-k> <2> <10> <zsh> <-lic> <exit>' 'Zsh startup has a two-second hard-kill grace period'
 case $(cat "$call_log") in
