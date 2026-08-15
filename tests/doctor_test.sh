@@ -75,7 +75,7 @@ VERSION_ID="24.04"
 VERSION_CODENAME=noble
 EOF
 
-owned_commands='bash batcat blueman-applet brightnessctl curl direnv fuzzel fzf git grim jq kitty mako make nm-applet notify-send nvim pipx pipewire playerctl python3 rg shellcheck slurp stow sway swayidle swaylock tmux tree waybar wireplumber wl-copy wl-paste Xwayland zoxide zsh'
+owned_commands='bash batcat blueman-applet brightnessctl curl direnv fzf git grim jq kitty mako make nm-applet notify-send nvim pipx pipewire playerctl python3 rg shellcheck slurp stow sway swayidle swaylock tmux tree waybar wireplumber wl-copy wl-paste wofi Xwayland zoxide zsh'
 external_commands='docker kubectl zoom'
 
 make_success_command() {
@@ -271,6 +271,10 @@ rm "$test_repo/manifests/apt-common.txt.bak"
 run_doctor
 assert_eq 0 "$doctor_status" 'healthy owned commands succeed despite missing external software'
 assert_contains "$doctor_output" 'PASS command: nvim' 'owned Neovim command passes'
+assert_contains "$doctor_output" 'PASS command: wofi' 'owned Wofi command passes'
+case $doctor_output in
+  *'command: fuzzel'*) fail 'doctor still checks unavailable Fuzzel' ;;
+esac
 assert_contains "$doctor_output" 'PASS command: fd (via fdfind)' 'Ubuntu fdfind satisfies the fd command check'
 assert_contains "$doctor_output" 'WARN external command: slack' 'missing Slack is warning-only'
 assert_contains "$doctor_output" 'SKIP Sway session checks: not running under Sway' 'non-Sway sessions skip service checks'

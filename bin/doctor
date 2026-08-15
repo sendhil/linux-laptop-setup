@@ -187,7 +187,7 @@ while IFS=$'\t' read -r package _required; do
   case $package in
     bat) check_command batcat ;;
     blueman) check_command blueman-applet ;;
-    brightnessctl|curl|direnv|fuzzel|fzf|git|grim|jq|kitty|pipx|pipewire|playerctl|python3|shellcheck|slurp|stow|sway|swayidle|swaylock|tmux|tree|waybar|wireplumber|zoxide)
+    brightnessctl|curl|direnv|fzf|git|grim|jq|kitty|pipx|pipewire|playerctl|python3|shellcheck|slurp|stow|sway|swayidle|swaylock|tmux|tree|waybar|wireplumber|wofi|zoxide)
       check_command "$package"
       ;;
     build-essential) check_command make ;;
