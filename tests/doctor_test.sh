@@ -10,14 +10,29 @@ trap 'rm -rf "$tmp_dir"' EXIT
 
 test_repo="$tmp_dir/repository"
 fake_bin="$tmp_dir/fake-bin"
+host_bin="$tmp_dir/host-bin"
+safe_bin="$tmp_dir/safe-bin"
 call_log="$tmp_dir/calls.log"
 policy_agent="$tmp_dir/policy-agent"
 proc_root="$tmp_dir/proc"
 empty_proc_root="$tmp_dir/empty-proc"
 runtime_tmp="$tmp_dir/runtime-tmp"
-mkdir -p "$test_repo" "$fake_bin" "$proc_root/123" "$empty_proc_root" "$runtime_tmp"
+mkdir -p "$test_repo" "$fake_bin" "$host_bin" "$safe_bin" \
+  "$proc_root/123" "$empty_proc_root" "$runtime_tmp"
 cp -R "$repo_dir"/. "$test_repo"/
 printf 'runtime sentinel\n' >"$runtime_tmp/sentinel"
+
+# Model a workplace Ubuntu host where externally managed Slack is installed.
+# The doctor fixture must not let host applications change its result counts.
+cat >"$host_bin/slack" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+chmod +x "$host_bin/slack"
+
+for command_name in awk cat dirname grep head sed sleep sort tr; do
+  ln -s "$(command -v "$command_name")" "$safe_bin/$command_name"
+done
 
 cat >"$tmp_dir/run-with-deadline.py" <<'EOF'
 import os
@@ -198,7 +213,7 @@ run_doctor() {
   fi
   set +e
   doctor_output=$(cd "$test_repo" && env \
-    PATH="$fake_bin:/usr/bin:/bin" \
+    PATH="$fake_bin:$safe_bin" \
     SETUP_OS_RELEASE="${SETUP_OS_RELEASE:-$tmp_dir/os-release}" \
     SETUP_POLICY_AGENT="${SETUP_POLICY_AGENT:-$policy_agent}" \
     SETUP_PROC_ROOT="${SETUP_PROC_ROOT:-$proc_root}" \
@@ -224,7 +239,7 @@ run_doctor_args() {
   : >"$call_log"
   set +e
   doctor_output=$(cd "$test_repo" && env \
-    PATH="$fake_bin:/usr/bin:/bin" \
+    PATH="$fake_bin:$safe_bin" \
     SETUP_OS_RELEASE="$tmp_dir/does-not-exist" \
     FAKE_CALL_LOG="$call_log" \
     /bin/bash bin/doctor "$@" 2>&1)
