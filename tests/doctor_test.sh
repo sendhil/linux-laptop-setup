@@ -17,6 +17,8 @@ policy_agent="$tmp_dir/policy-agent"
 proc_root="$tmp_dir/proc"
 empty_proc_root="$tmp_dir/empty-proc"
 runtime_tmp="$tmp_dir/runtime-tmp"
+clean_shell_marker='SETUP_DOCTOR_CLEAN_SHELL_COMMAND_REACHED_8f4d9e2c'
+clean_shell_command="printf '%s\n' '$clean_shell_marker'; exit"
 mkdir -p "$test_repo" "$fake_bin" "$host_bin" "$safe_bin" \
   "$proc_root/123" "$empty_proc_root" "$runtime_tmp"
 canonical_fake_bin=$(CDPATH= cd -- "$fake_bin" && pwd -P)
@@ -92,9 +94,21 @@ case ${0##*/} in
     exit 0
     ;;
   bash)
+    last_argument=${!#}
+    case $last_argument in
+      *SETUP_DOCTOR_CLEAN_SHELL_COMMAND_REACHED_8f4d9e2c*)
+        printf '%s\n' 'SETUP_DOCTOR_CLEAN_SHELL_COMMAND_REACHED_8f4d9e2c'
+        ;;
+    esac
     exit "${FAKE_BASH_STATUS:-0}"
     ;;
   zsh)
+    last_argument=${!#}
+    case $last_argument in
+      *SETUP_DOCTOR_CLEAN_SHELL_COMMAND_REACHED_8f4d9e2c*)
+        printf '%s\n' 'SETUP_DOCTOR_CLEAN_SHELL_COMMAND_REACHED_8f4d9e2c'
+        ;;
+    esac
     if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
       trap '' TERM
       while :; do :; done
@@ -118,6 +132,11 @@ EOF
 for command_name in $owned_commands $external_commands fdfind; do
   make_success_command "$command_name"
 done
+
+cat >"$fake_bin/bash-no-marker" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
 
 cat >"$fake_bin/dpkg" <<'EOF'
 #!/bin/bash
@@ -143,6 +162,7 @@ shift
 command_basename=${1##*/}
 case $kill_grace:$duration:$command_basename in
   1:3:bash) : ;;
+  1:3:bash-no-marker) : ;;
   1:3:zsh)
     if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
       exit 137
@@ -367,11 +387,17 @@ assert_contains "$doctor_output" \
   "shell startup executable: $canonical_fake_bin/bash" \
   'a timed-out Bash startup reports its canonical executable path'
 assert_contains "$doctor_output" \
-  'shell startup diagnostic: bash clean system environment (passed)' \
+  'shell startup diagnostic: bash clean system environment (passed; command reached)' \
   'a timed-out Bash startup reports its clean system-environment probe'
 assert_contains "$(cat "$call_log")" \
-  "env <-i> <HOME=$HOME> <PATH=/usr/bin:/bin> <TERM=dumb> <$fake_bin/timeout> <-k> <1> <3> <$fake_bin/bash> <--noprofile> <--norc> <-ic> <exit>" \
+  "env <-i> <HOME=$HOME> <PATH=/usr/bin:/bin> <TERM=dumb> <$fake_bin/timeout> <-k> <1> <3> <$fake_bin/bash> <--noprofile> <--norc> <-ic> <$clean_shell_command>" \
   'the clean Bash probe uses an empty environment and absolute system tools'
+
+SETUP_SYSTEM_BASH="$fake_bin/bash-no-marker" FAKE_BASH_STATUS=124 run_doctor
+assert_eq 1 "$doctor_status" 'a timed-out Bash startup remains owned drift when the clean probe emits no marker'
+assert_contains "$doctor_output" \
+  'shell startup diagnostic: bash clean system environment (passed; command not reached)' \
+  'a clean Bash probe reports when its command marker is absent'
 
 diagnostic_lines='line 1 unsafe\033[31m-red\033[0m\n'
 line_number=2
@@ -400,7 +426,7 @@ assert_contains "$doctor_output" \
   "shell startup executable: $canonical_fake_bin/zsh" \
   'a timed-out Zsh startup reports its canonical executable path'
 assert_contains "$doctor_output" \
-  'shell startup diagnostic: zsh clean system environment (passed)' \
+  'shell startup diagnostic: zsh clean system environment (passed; command reached)' \
   'a timed-out Zsh startup reports its clean system-environment probe'
 assert_contains "$(cat "$call_log")" \
   'timeout <-k> <1> <3> <zsh> <-df> <-ic> <exit>' \
@@ -412,7 +438,7 @@ assert_contains "$(cat "$call_log")" \
   "readlink <-f> <$fake_bin/zsh>" \
   'a timed-out Zsh startup canonicalizes its resolved executable path'
 assert_contains "$(cat "$call_log")" \
-  "env <-i> <HOME=$HOME> <PATH=/usr/bin:/bin> <TERM=dumb> <$fake_bin/timeout> <-k> <1> <3> <$fake_bin/zsh> <-df> <-ic> <exit>" \
+  "env <-i> <HOME=$HOME> <PATH=/usr/bin:/bin> <TERM=dumb> <$fake_bin/timeout> <-k> <1> <3> <$fake_bin/zsh> <-df> <-ic> <$clean_shell_command>" \
   'the clean Zsh probe uses an empty environment and absolute system tools'
 case $(cat "$call_log") in
   *'timeout <-k> <1> <3> <bash>'*) fail 'a healthy Bash primary probe does not run Bash diagnostics' ;;
