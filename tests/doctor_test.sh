@@ -16,14 +16,9 @@ call_log="$tmp_dir/calls.log"
 policy_agent="$tmp_dir/policy-agent"
 proc_root="$tmp_dir/proc"
 empty_proc_root="$tmp_dir/empty-proc"
-runtime_tmp="$tmp_dir/runtime-tmp"
-clean_shell_marker='SETUP_DOCTOR_CLEAN_SHELL_COMMAND_REACHED_8f4d9e2c'
-clean_shell_command="printf '%s\n' '$clean_shell_marker'; exit"
 mkdir -p "$test_repo" "$fake_bin" "$host_bin" "$safe_bin" \
-  "$proc_root/123" "$empty_proc_root" "$runtime_tmp"
-canonical_fake_bin=$(CDPATH= cd -- "$fake_bin" && pwd -P)
+  "$proc_root/123" "$empty_proc_root"
 cp -R "$repo_dir"/. "$test_repo"/
-printf 'runtime sentinel\n' >"$runtime_tmp/sentinel"
 
 # Model a workplace Ubuntu host where externally managed Slack is installed.
 # The doctor fixture must not let host applications change its result counts.
@@ -36,31 +31,6 @@ chmod +x "$host_bin/slack"
 for command_name in awk cat dirname grep head sed sleep sort tr; do
   ln -s "$(command -v "$command_name")" "$safe_bin/$command_name"
 done
-
-cat >"$tmp_dir/run-with-deadline.py" <<'EOF'
-import os
-import signal
-import subprocess
-import sys
-
-deadline = float(sys.argv[1])
-process = subprocess.Popen(
-    sys.argv[2:],
-    stdout=subprocess.PIPE,
-    stderr=subprocess.STDOUT,
-    text=True,
-    start_new_session=True,
-)
-try:
-    output, _ = process.communicate(timeout=deadline)
-except subprocess.TimeoutExpired:
-    os.killpg(process.pid, signal.SIGKILL)
-    output, _ = process.communicate()
-    sys.stdout.write(output)
-    sys.exit(98)
-sys.stdout.write(output)
-sys.exit(process.returncode)
-EOF
 
 cat >"$policy_agent" <<'EOF'
 #!/bin/bash
@@ -93,36 +63,6 @@ case ${0##*/} in
     printf '%s\n' "${FAKE_FONT_FAMILY:-JetBrainsMono Nerd Font Mono}"
     exit 0
     ;;
-  bash)
-    last_argument=${!#}
-    case $last_argument in
-      *SETUP_DOCTOR_CLEAN_SHELL_COMMAND_REACHED_8f4d9e2c*)
-        printf '%s\n' 'SETUP_DOCTOR_CLEAN_SHELL_COMMAND_REACHED_8f4d9e2c'
-        ;;
-    esac
-    exit "${FAKE_BASH_STATUS:-0}"
-    ;;
-  zsh)
-    last_argument=${!#}
-    case $last_argument in
-      *SETUP_DOCTOR_CLEAN_SHELL_COMMAND_REACHED_8f4d9e2c*)
-        printf '%s\n' 'SETUP_DOCTOR_CLEAN_SHELL_COMMAND_REACHED_8f4d9e2c'
-        ;;
-    esac
-    if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
-      trap '' TERM
-      while :; do :; done
-    fi
-    if [ "${FAKE_ZSH_LARGE_OUTPUT:-0}" -eq 1 ]; then
-      line_number=1
-      while [ "$line_number" -le 20000 ]; do
-        printf 'large diagnostic line %s\n' "$line_number"
-        line_number=$((line_number + 1))
-      done
-    fi
-    [ -z "${FAKE_ZSH_OUTPUT:-}" ] || printf '%b' "$FAKE_ZSH_OUTPUT"
-    exit "${FAKE_ZSH_STATUS:-0}"
-    ;;
   *) exit 0 ;;
 esac
 EOF
@@ -132,11 +72,6 @@ EOF
 for command_name in $owned_commands $external_commands fdfind; do
   make_success_command "$command_name"
 done
-
-cat >"$fake_bin/bash-no-marker" <<'EOF'
-#!/bin/bash
-exit 0
-EOF
 
 cat >"$fake_bin/dpkg" <<'EOF'
 #!/bin/bash
@@ -161,45 +96,6 @@ duration=${1:-}
 shift
 command_basename=${1##*/}
 case $kill_grace:$duration:$command_basename in
-  1:3:bash) : ;;
-  1:3:bash-no-marker) : ;;
-  1:3:zsh)
-    if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
-      exit 137
-    fi
-    ;;
-  1:3:script)
-    case ${3:-} in
-      *zsh*)
-        if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
-          exit 137
-        fi
-        ;;
-    esac
-    ;;
-  2:10:zsh)
-    if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
-      "$@" &
-      child=$!
-      sleep 0.1
-      kill -TERM "$child" 2>/dev/null || :
-      sleep 0.1
-      kill -0 "$child" 2>/dev/null || exit 65
-      kill -KILL "$child" 2>/dev/null || :
-      wait "$child" 2>/dev/null
-      exit 137
-    fi
-    ;;
-  2:10:script)
-    case ${3:-} in
-      *zsh*)
-        if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
-          exit 137
-        fi
-        ;;
-    esac
-    ;;
-  2:10:*) : ;;
   2:5:nvidia-smi)
     [ "${FAKE_NVIDIA_TIMEOUT:-0}" -eq 0 ] || exit 124
     [ "${FAKE_NVIDIA_HARD_TIMEOUT:-0}" -eq 0 ] || exit 137
@@ -207,25 +103,6 @@ case $kill_grace:$duration:$command_basename in
   *) exit 64 ;;
 esac
 "$@"
-EOF
-
-cat >"$fake_bin/script" <<'EOF'
-#!/bin/bash
-printf 'script' >>"$FAKE_CALL_LOG"
-printf ' <%s>' "$@" >>"$FAKE_CALL_LOG"
-printf '\n' >>"$FAKE_CALL_LOG"
-[ "${1:-}" = -qefc ] || exit 64
-command_line=${2:-}
-[ "${3:-}" = /dev/null ] || exit 64
-/bin/bash -c "$command_line"
-EOF
-
-cat >"$fake_bin/env" <<'EOF'
-#!/bin/bash
-printf 'env' >>"$FAKE_CALL_LOG"
-printf ' <%s>' "$@" >>"$FAKE_CALL_LOG"
-printf '\n' >>"$FAKE_CALL_LOG"
-exec /usr/bin/env "$@"
 EOF
 
 cat >"$fake_bin/systemctl" <<'EOF'
@@ -281,36 +158,21 @@ chmod +x "$fake_bin"/*
 run_doctor() {
   : >"$call_log"
   doctor_runner=(/bin/bash bin/doctor "${DOCTOR_PROFILE:-work}")
-  if [ -n "${DOCTOR_OUTER_DEADLINE:-}" ]; then
-    doctor_runner=(/usr/bin/python3 "$tmp_dir/run-with-deadline.py" \
-      "$DOCTOR_OUTER_DEADLINE" "${doctor_runner[@]}")
-  fi
   set +e
   doctor_output=$(cd "$test_repo" && env \
     PATH="$fake_bin:$safe_bin" \
     SETUP_OS_RELEASE="${SETUP_OS_RELEASE:-$tmp_dir/os-release}" \
     SETUP_POLICY_AGENT="${SETUP_POLICY_AGENT:-$policy_agent}" \
     SETUP_PROC_ROOT="${SETUP_PROC_ROOT:-$proc_root}" \
-    SETUP_SYSTEM_BASH="${SETUP_SYSTEM_BASH:-$fake_bin/bash}" \
-    SETUP_SYSTEM_ENV="${SETUP_SYSTEM_ENV:-$fake_bin/env}" \
-    SETUP_SYSTEM_PTY="${SETUP_SYSTEM_PTY:-$fake_bin/script}" \
-    SETUP_SYSTEM_TIMEOUT="${SETUP_SYSTEM_TIMEOUT:-$fake_bin/timeout}" \
-    SETUP_SYSTEM_ZSH="${SETUP_SYSTEM_ZSH:-$fake_bin/zsh}" \
-    TMPDIR="$runtime_tmp" \
     SWAYSOCK="${SWAYSOCK:-}" \
     XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-}" \
     FAKE_CALL_LOG="$call_log" \
     FAKE_FONT_FAMILY="${FAKE_FONT_FAMILY:-JetBrainsMono Nerd Font Mono}" \
-    FAKE_BASH_STATUS="${FAKE_BASH_STATUS:-0}" \
     FAKE_INACTIVE_SERVICE="${FAKE_INACTIVE_SERVICE:-}" \
     FAKE_LSMOD_OUTPUT="${FAKE_LSMOD_OUTPUT:-}" \
     FAKE_NVIDIA_HARD_TIMEOUT="${FAKE_NVIDIA_HARD_TIMEOUT:-0}" \
     FAKE_NVIDIA_STATUS="${FAKE_NVIDIA_STATUS:-0}" \
     FAKE_NVIDIA_TIMEOUT="${FAKE_NVIDIA_TIMEOUT:-0}" \
-    FAKE_ZSH_LARGE_OUTPUT="${FAKE_ZSH_LARGE_OUTPUT:-0}" \
-    FAKE_ZSH_IGNORE_TERM="${FAKE_ZSH_IGNORE_TERM:-0}" \
-    FAKE_ZSH_OUTPUT="${FAKE_ZSH_OUTPUT:-}" \
-    FAKE_ZSH_STATUS="${FAKE_ZSH_STATUS:-0}" \
     "${doctor_runner[@]}" 2>&1)
   doctor_status=$?
   set -e
@@ -363,41 +225,19 @@ esac
 assert_contains "$doctor_output" 'PASS command: fd (via fdfind)' 'Ubuntu fdfind satisfies the fd command check'
 assert_contains "$doctor_output" 'WARN external command: slack' 'missing Slack is warning-only'
 assert_contains "$doctor_output" 'SKIP Sway session checks: not running under Sway' 'non-Sway sessions skip service checks'
-assert_contains "$doctor_output" 'PASS shell startup: bash' 'Bash startup is checked'
-assert_contains "$doctor_output" 'PASS shell startup: zsh' 'Zsh startup is checked'
-assert_contains "$(cat "$call_log")" \
-  'script <-qefc> <bash -lic exit> </dev/null>' \
-  'Bash startup runs through a pseudo-terminal helper'
-assert_contains "$(cat "$call_log")" \
-  'script <-qefc> <zsh -lic exit> </dev/null>' \
-  'Zsh startup runs through a pseudo-terminal helper'
 case $doctor_output in
-  *'shell startup executable:'*|*'clean system environment'*)
-    fail 'healthy shell startups do not run timeout diagnostics' ;;
+  *'shell startup:'*) fail 'Doctor does not gate setup on shell startup checks' ;;
+esac
+case $(cat "$call_log") in
+  *script*|*'timeout <-k>'*) fail 'Doctor does not invoke PTY or shell startup timeout helpers' ;;
 esac
 assert_contains "$doctor_output" 'Summary: PASS ' 'doctor prints result accounting'
 assert_contains "$doctor_output" ' WARN 1 SKIP 1 FAIL 0' 'warnings and skips do not count as failures'
-
-missing_system_pty="$tmp_dir/missing-script"
-SETUP_SYSTEM_PTY="$missing_system_pty" run_doctor
-assert_eq 1 "$doctor_status" 'missing PTY helper fails shell startup checks clearly'
-assert_contains "$doctor_output" \
-  "FAIL shell startup: bash (PTY helper unavailable: $missing_system_pty)" \
-  'missing PTY helper identifies the Bash startup prerequisite'
-assert_contains "$doctor_output" \
-  "FAIL shell startup: zsh (PTY helper unavailable: $missing_system_pty)" \
-  'missing PTY helper identifies the Zsh startup prerequisite'
 
 FAKE_FONT_FAMILY='DejaVu Sans Mono' run_doctor
 assert_eq 1 "$doctor_status" 'a fallback font fails the owned WezTerm font check'
 assert_contains "$doctor_output" 'FAIL font: JetBrainsMono Nerd Font Mono' \
   'the missing exact WezTerm font family is identified'
-assert_contains "$(cat "$call_log")" \
-  "timeout <-k> <2> <10> <$fake_bin/script> <-qefc> <bash -lic exit> </dev/null>" \
-  'Bash startup has a two-second hard-kill grace period'
-assert_contains "$(cat "$call_log")" \
-  "timeout <-k> <2> <10> <$fake_bin/script> <-qefc> <zsh -lic exit> </dev/null>" \
-  'Zsh startup has a two-second hard-kill grace period'
 case $(cat "$call_log") in
   *systemctl*|*readlink*) fail 'non-Sway sessions do not query user services or the policy agent' ;;
 esac
@@ -419,109 +259,6 @@ case $doctor_output in
 esac
 mv "$fake_bin/nvim.saved" "$fake_bin/nvim"
 printf 'neovim 0.9.0\n' >>"$test_repo/manifests/apt-common.txt"
-
-FAKE_ZSH_STATUS=7 FAKE_ZSH_OUTPUT=$'startup problem\nsecond line\n' run_doctor
-assert_eq 1 "$doctor_status" 'a failed bounded shell startup is owned drift'
-assert_contains "$doctor_output" 'FAIL shell startup: zsh (status 7)' 'failed Zsh startup includes its status'
-assert_contains "$doctor_output" $'  startup problem\n  second line' 'shell startup diagnostics are indented'
-case $doctor_output in
-  *'shell startup executable:'*|*'clean system environment'*)
-    fail 'non-timeout shell failures do not run timeout diagnostics' ;;
-esac
-
-FAKE_BASH_STATUS=124 run_doctor
-assert_eq 1 "$doctor_status" 'a timed-out Bash startup is owned drift'
-assert_contains "$doctor_output" 'FAIL shell startup: bash (timed out after 10s)' \
-  'Bash timeout is distinguished from other failures'
-assert_contains "$doctor_output" \
-  "shell startup executable: $canonical_fake_bin/bash" \
-  'a timed-out Bash startup reports its canonical executable path'
-assert_contains "$doctor_output" \
-  'shell startup diagnostic: bash clean system environment (passed; command reached)' \
-  'a timed-out Bash startup reports its clean system-environment probe'
-assert_contains "$(cat "$call_log")" \
-  "env <-i> <HOME=$HOME> <PATH=/usr/bin:/bin> <TERM=dumb> <$fake_bin/timeout> <-k> <1> <3> <$fake_bin/script> <-qefc>" \
-  'the clean Bash probe uses an empty environment and absolute system tools'
-assert_contains "$(cat "$call_log")" \
-  "$fake_bin/bash --noprofile --norc -ic" \
-  'the clean Bash probe preserves the shell startup arguments inside the PTY command'
-
-SETUP_SYSTEM_BASH="$fake_bin/bash-no-marker" FAKE_BASH_STATUS=124 run_doctor
-assert_eq 1 "$doctor_status" 'a timed-out Bash startup remains owned drift when the clean probe emits no marker'
-assert_contains "$doctor_output" \
-  'shell startup diagnostic: bash clean system environment (passed; command not reached)' \
-  'a clean Bash probe reports when its command marker is absent'
-
-diagnostic_lines='line 1 unsafe\033[31m-red\033[0m\n'
-line_number=2
-while [ "$line_number" -le 25 ]; do
-  diagnostic_lines="${diagnostic_lines}line $line_number\n"
-  line_number=$((line_number + 1))
-done
-FAKE_ZSH_STATUS=7 FAKE_ZSH_OUTPUT="$diagnostic_lines" run_doctor
-assert_eq 1 "$doctor_status" 'verbose shell startup failure remains owned drift'
-assert_contains "$doctor_output" '  line 1 unsafe-red' 'shell diagnostics strip terminal styling sequences'
-assert_contains "$doctor_output" '  line 20' 'shell diagnostics retain the twentieth line'
-case $doctor_output in
-  *'line 21'*|*$'\033'*) fail 'shell diagnostics are bounded and strip terminal control bytes' ;;
-esac
-
-FAKE_ZSH_STATUS=124 FAKE_ZSH_OUTPUT='partial output\n' run_doctor
-assert_eq 1 "$doctor_status" 'a timed-out shell startup is owned drift'
-assert_contains "$doctor_output" 'FAIL shell startup: zsh (timed out after 10s)' 'shell timeout is distinguished from other failures'
-assert_contains "$doctor_output" \
-  'shell startup diagnostic: zsh clean baseline (timed out after 3s; status 124)' \
-  'a timed-out Zsh startup reports its clean baseline diagnostic status'
-assert_contains "$doctor_output" \
-  'shell startup diagnostic: zsh user startup (timed out after 3s; status 124)' \
-  'a timed-out Zsh startup reports its user startup diagnostic status'
-assert_contains "$doctor_output" \
-  "shell startup executable: $canonical_fake_bin/zsh" \
-  'a timed-out Zsh startup reports its canonical executable path'
-assert_contains "$doctor_output" \
-  'shell startup diagnostic: zsh clean system environment (passed; command reached)' \
-  'a timed-out Zsh startup reports its clean system-environment probe'
-assert_contains "$(cat "$call_log")" \
-  "timeout <-k> <1> <3> <$fake_bin/script> <-qefc> <zsh -df -ic exit> </dev/null>" \
-  'Zsh clean baseline uses a three-second bounded diagnostic probe'
-assert_contains "$(cat "$call_log")" \
-  "timeout <-k> <1> <3> <$fake_bin/script> <-qefc> <zsh -dlic exit> </dev/null>" \
-  'Zsh user startup uses a three-second bounded diagnostic probe'
-assert_contains "$(cat "$call_log")" \
-  "readlink <-f> <$fake_bin/zsh>" \
-  'a timed-out Zsh startup canonicalizes its resolved executable path'
-assert_contains "$(cat "$call_log")" \
-  "env <-i> <HOME=$HOME> <PATH=/usr/bin:/bin> <TERM=dumb> <$fake_bin/timeout> <-k> <1> <3> <$fake_bin/script> <-qefc>" \
-  'the clean Zsh probe uses an empty environment and absolute system tools'
-assert_contains "$(cat "$call_log")" \
-  "$fake_bin/zsh -df -ic" \
-  'the clean Zsh probe preserves the shell startup arguments inside the PTY command'
-case $(cat "$call_log") in
-  *'timeout <-k> <1> <3> <bash>'*) fail 'a healthy Bash primary probe does not run Bash diagnostics' ;;
-esac
-case $doctor_output in
-  *'partial output'*) fail 'timeout output does not obscure the bounded-time diagnosis' ;;
-esac
-
-DOCTOR_OUTER_DEADLINE=3 FAKE_ZSH_IGNORE_TERM=1 run_doctor
-if [ "$doctor_status" -eq 98 ]; then
-  fail 'the independent outer safety deadline killed the doctor'
-fi
-assert_eq 1 "$doctor_status" 'a TERM-ignoring shell is hard-killed before the outer deadline'
-assert_contains "$doctor_output" 'FAIL shell startup: zsh (timed out after 10s)' 'status 137 is reported as a shell timeout'
-
-runtime_before=$(find "$runtime_tmp" -type f -print | LC_ALL=C sort)
-FAKE_ZSH_STATUS=7 FAKE_ZSH_LARGE_OUTPUT=1 run_doctor
-assert_eq 1 "$doctor_status" 'large shell diagnostics preserve the command status'
-assert_contains "$doctor_output" 'FAIL shell startup: zsh (status 7)' 'bounded capture preserves a nonzero producer status'
-assert_contains "$doctor_output" '  large diagnostic line 20' 'bounded capture retains useful leading output'
-case $doctor_output in
-  *'large diagnostic line 21'*) fail 'large shell diagnostics remain bounded to twenty displayed lines' ;;
-esac
-assert_eq "$runtime_before" "$(find "$runtime_tmp" -type f -print | LC_ALL=C sort)" 'bounded shell capture creates no temporary files'
-doctor_source=$(cat "$test_repo/bin/doctor")
-assert_contains "$doctor_source" 'head -c 4096' 'shell output is bounded during capture'
-assert_contains "$doctor_source" 'cat >/dev/null' 'shell output beyond the capture limit is drained'
 
 XDG_CURRENT_DESKTOP=noswaydesktop run_doctor
 assert_eq 0 "$doctor_status" 'a desktop name merely containing sway is not a Sway session'
