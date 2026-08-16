@@ -26,6 +26,7 @@ external_assumptions=$(load_external_assumptions "$profile") || exit 2
 policy_agent=${SETUP_POLICY_AGENT:-/usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1}
 proc_root=${SETUP_PROC_ROOT:-/proc}
 system_env=${SETUP_SYSTEM_ENV:-/usr/bin/env}
+system_pty=${SETUP_SYSTEM_PTY:-/usr/bin/script}
 system_timeout=${SETUP_SYSTEM_TIMEOUT:-/usr/bin/timeout}
 system_bash=${SETUP_SYSTEM_BASH:-/bin/bash}
 system_zsh=${SETUP_SYSTEM_ZSH:-/usr/bin/zsh}
@@ -45,7 +46,7 @@ if [[ $proc_root =~ [[:cntrl:]] ]]; then
   printf 'error: invalid proc root\n' >&2
   exit 2
 fi
-for system_binary in "$system_env" "$system_timeout" "$system_bash" "$system_zsh"; do
+for system_binary in "$system_env" "$system_pty" "$system_timeout" "$system_bash" "$system_zsh"; do
   if [[ $system_binary != /* ]] || [[ $system_binary =~ [[:cntrl:]] ]]; then
     printf 'error: invalid system binary path\n' >&2
     exit 2
@@ -129,10 +130,41 @@ capture_bounded_command() {
   bounded_status=$?
 }
 
+build_pty_command() {
+  pty_command=$1
+  shift
+  for pty_argument in "$@"; do
+    case $pty_argument in
+      *[!A-Za-z0-9_./:=+-]*)
+        escaped_pty_argument=${pty_argument//\'/\'\\\'\'}
+        pty_command="$pty_command '$escaped_pty_argument'"
+        ;;
+      *)
+        pty_command="$pty_command $pty_argument"
+        ;;
+    esac
+  done
+}
+
+run_shell_in_pty() {
+  shell_name=$1
+  shift
+  build_pty_command "$shell_name" "$@"
+  timeout -k 1 3 "$system_pty" -qefc "$pty_command" /dev/null
+}
+
+run_clean_shell_in_pty() {
+  shell_path=$1
+  shift
+  build_pty_command "$shell_path" "$@"
+  "$system_env" -i "HOME=$HOME" PATH=/usr/bin:/bin TERM=dumb \
+    "$system_timeout" -k 1 3 "$system_pty" -qefc "$pty_command" /dev/null
+}
+
 report_shell_diagnostic() {
   diagnostic_label=$1
   shift
-  capture_bounded_command timeout -k 1 3 "$@"
+  capture_bounded_command run_shell_in_pty "$@"
   diagnostic_status=$bounded_status
   case $diagnostic_status in
     0)
@@ -152,8 +184,7 @@ report_shell_diagnostic() {
 report_clean_shell_diagnostic() {
   diagnostic_label=$1
   shift
-  capture_bounded_command "$system_env" -i "HOME=$HOME" PATH=/usr/bin:/bin TERM=dumb \
-    "$system_timeout" -k 1 3 "$@"
+  capture_bounded_command run_clean_shell_in_pty "$@"
   diagnostic_status=$bounded_status
   clean_probe_reach='command not reached'
   while IFS= read -r diagnostic_line; do
@@ -229,7 +260,12 @@ report_resolved_shell_executable() {
 
 check_shell_startup() {
   shell_name=$1
-  capture_bounded_command timeout -k 2 10 "$shell_name" -lic exit
+  if [ ! -x "$system_pty" ]; then
+    fail_check "shell startup: $shell_name (PTY helper unavailable: $system_pty)"
+    return
+  fi
+  build_pty_command "$shell_name" -lic exit
+  capture_bounded_command timeout -k 2 10 "$system_pty" -qefc "$pty_command" /dev/null
   shell_output=$bounded_output
   shell_status=$bounded_status
   case $shell_status in

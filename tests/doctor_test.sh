@@ -168,6 +168,15 @@ case $kill_grace:$duration:$command_basename in
       exit 137
     fi
     ;;
+  1:3:script)
+    case ${3:-} in
+      *zsh*)
+        if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
+          exit 137
+        fi
+        ;;
+    esac
+    ;;
   2:10:zsh)
     if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
       "$@" &
@@ -181,6 +190,15 @@ case $kill_grace:$duration:$command_basename in
       exit 137
     fi
     ;;
+  2:10:script)
+    case ${3:-} in
+      *zsh*)
+        if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
+          exit 137
+        fi
+        ;;
+    esac
+    ;;
   2:10:*) : ;;
   2:5:nvidia-smi)
     [ "${FAKE_NVIDIA_TIMEOUT:-0}" -eq 0 ] || exit 124
@@ -189,6 +207,17 @@ case $kill_grace:$duration:$command_basename in
   *) exit 64 ;;
 esac
 "$@"
+EOF
+
+cat >"$fake_bin/script" <<'EOF'
+#!/bin/bash
+printf 'script' >>"$FAKE_CALL_LOG"
+printf ' <%s>' "$@" >>"$FAKE_CALL_LOG"
+printf '\n' >>"$FAKE_CALL_LOG"
+[ "${1:-}" = -qefc ] || exit 64
+command_line=${2:-}
+[ "${3:-}" = /dev/null ] || exit 64
+/bin/bash -c "$command_line"
 EOF
 
 cat >"$fake_bin/env" <<'EOF'
@@ -264,6 +293,7 @@ run_doctor() {
     SETUP_PROC_ROOT="${SETUP_PROC_ROOT:-$proc_root}" \
     SETUP_SYSTEM_BASH="${SETUP_SYSTEM_BASH:-$fake_bin/bash}" \
     SETUP_SYSTEM_ENV="${SETUP_SYSTEM_ENV:-$fake_bin/env}" \
+    SETUP_SYSTEM_PTY="${SETUP_SYSTEM_PTY:-$fake_bin/script}" \
     SETUP_SYSTEM_TIMEOUT="${SETUP_SYSTEM_TIMEOUT:-$fake_bin/timeout}" \
     SETUP_SYSTEM_ZSH="${SETUP_SYSTEM_ZSH:-$fake_bin/zsh}" \
     TMPDIR="$runtime_tmp" \
@@ -335,6 +365,12 @@ assert_contains "$doctor_output" 'WARN external command: slack' 'missing Slack i
 assert_contains "$doctor_output" 'SKIP Sway session checks: not running under Sway' 'non-Sway sessions skip service checks'
 assert_contains "$doctor_output" 'PASS shell startup: bash' 'Bash startup is checked'
 assert_contains "$doctor_output" 'PASS shell startup: zsh' 'Zsh startup is checked'
+assert_contains "$(cat "$call_log")" \
+  'script <-qefc> <bash -lic exit> </dev/null>' \
+  'Bash startup runs through a pseudo-terminal helper'
+assert_contains "$(cat "$call_log")" \
+  'script <-qefc> <zsh -lic exit> </dev/null>' \
+  'Zsh startup runs through a pseudo-terminal helper'
 case $doctor_output in
   *'shell startup executable:'*|*'clean system environment'*)
     fail 'healthy shell startups do not run timeout diagnostics' ;;
@@ -342,12 +378,26 @@ esac
 assert_contains "$doctor_output" 'Summary: PASS ' 'doctor prints result accounting'
 assert_contains "$doctor_output" ' WARN 1 SKIP 1 FAIL 0' 'warnings and skips do not count as failures'
 
+missing_system_pty="$tmp_dir/missing-script"
+SETUP_SYSTEM_PTY="$missing_system_pty" run_doctor
+assert_eq 1 "$doctor_status" 'missing PTY helper fails shell startup checks clearly'
+assert_contains "$doctor_output" \
+  "FAIL shell startup: bash (PTY helper unavailable: $missing_system_pty)" \
+  'missing PTY helper identifies the Bash startup prerequisite'
+assert_contains "$doctor_output" \
+  "FAIL shell startup: zsh (PTY helper unavailable: $missing_system_pty)" \
+  'missing PTY helper identifies the Zsh startup prerequisite'
+
 FAKE_FONT_FAMILY='DejaVu Sans Mono' run_doctor
 assert_eq 1 "$doctor_status" 'a fallback font fails the owned WezTerm font check'
 assert_contains "$doctor_output" 'FAIL font: JetBrainsMono Nerd Font Mono' \
   'the missing exact WezTerm font family is identified'
-assert_contains "$(cat "$call_log")" 'timeout <-k> <2> <10> <bash> <-lic> <exit>' 'Bash startup has a two-second hard-kill grace period'
-assert_contains "$(cat "$call_log")" 'timeout <-k> <2> <10> <zsh> <-lic> <exit>' 'Zsh startup has a two-second hard-kill grace period'
+assert_contains "$(cat "$call_log")" \
+  "timeout <-k> <2> <10> <$fake_bin/script> <-qefc> <bash -lic exit> </dev/null>" \
+  'Bash startup has a two-second hard-kill grace period'
+assert_contains "$(cat "$call_log")" \
+  "timeout <-k> <2> <10> <$fake_bin/script> <-qefc> <zsh -lic exit> </dev/null>" \
+  'Zsh startup has a two-second hard-kill grace period'
 case $(cat "$call_log") in
   *systemctl*|*readlink*) fail 'non-Sway sessions do not query user services or the policy agent' ;;
 esac
@@ -390,8 +440,11 @@ assert_contains "$doctor_output" \
   'shell startup diagnostic: bash clean system environment (passed; command reached)' \
   'a timed-out Bash startup reports its clean system-environment probe'
 assert_contains "$(cat "$call_log")" \
-  "env <-i> <HOME=$HOME> <PATH=/usr/bin:/bin> <TERM=dumb> <$fake_bin/timeout> <-k> <1> <3> <$fake_bin/bash> <--noprofile> <--norc> <-ic> <$clean_shell_command>" \
+  "env <-i> <HOME=$HOME> <PATH=/usr/bin:/bin> <TERM=dumb> <$fake_bin/timeout> <-k> <1> <3> <$fake_bin/script> <-qefc>" \
   'the clean Bash probe uses an empty environment and absolute system tools'
+assert_contains "$(cat "$call_log")" \
+  "$fake_bin/bash --noprofile --norc -ic" \
+  'the clean Bash probe preserves the shell startup arguments inside the PTY command'
 
 SETUP_SYSTEM_BASH="$fake_bin/bash-no-marker" FAKE_BASH_STATUS=124 run_doctor
 assert_eq 1 "$doctor_status" 'a timed-out Bash startup remains owned drift when the clean probe emits no marker'
@@ -429,17 +482,20 @@ assert_contains "$doctor_output" \
   'shell startup diagnostic: zsh clean system environment (passed; command reached)' \
   'a timed-out Zsh startup reports its clean system-environment probe'
 assert_contains "$(cat "$call_log")" \
-  'timeout <-k> <1> <3> <zsh> <-df> <-ic> <exit>' \
+  "timeout <-k> <1> <3> <$fake_bin/script> <-qefc> <zsh -df -ic exit> </dev/null>" \
   'Zsh clean baseline uses a three-second bounded diagnostic probe'
 assert_contains "$(cat "$call_log")" \
-  'timeout <-k> <1> <3> <zsh> <-dlic> <exit>' \
+  "timeout <-k> <1> <3> <$fake_bin/script> <-qefc> <zsh -dlic exit> </dev/null>" \
   'Zsh user startup uses a three-second bounded diagnostic probe'
 assert_contains "$(cat "$call_log")" \
   "readlink <-f> <$fake_bin/zsh>" \
   'a timed-out Zsh startup canonicalizes its resolved executable path'
 assert_contains "$(cat "$call_log")" \
-  "env <-i> <HOME=$HOME> <PATH=/usr/bin:/bin> <TERM=dumb> <$fake_bin/timeout> <-k> <1> <3> <$fake_bin/zsh> <-df> <-ic> <$clean_shell_command>" \
+  "env <-i> <HOME=$HOME> <PATH=/usr/bin:/bin> <TERM=dumb> <$fake_bin/timeout> <-k> <1> <3> <$fake_bin/script> <-qefc>" \
   'the clean Zsh probe uses an empty environment and absolute system tools'
+assert_contains "$(cat "$call_log")" \
+  "$fake_bin/zsh -df -ic" \
+  'the clean Zsh probe preserves the shell startup arguments inside the PTY command'
 case $(cat "$call_log") in
   *'timeout <-k> <1> <3> <bash>'*) fail 'a healthy Bash primary probe does not run Bash diagnostics' ;;
 esac
