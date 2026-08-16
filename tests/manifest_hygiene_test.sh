@@ -80,7 +80,6 @@ bun
 bunx
 claude
 code
-codex
 difft
 dust
 eza
