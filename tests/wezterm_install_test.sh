@@ -26,7 +26,7 @@ assert_eq 'deb [signed-by=/usr/share/keyrings/wezterm-fury.gpg] https://apt.fury
 script_text=$(cat "$script")
 for required_text in \
   'https://apt.fury.io/wez/gpg.key' \
-  'EAB6DB20B1C8C3A5DB4B6AD08FC75FD3EB56E90B' \
+  '0CA603116C960BAFB2BF310BD7BA31CF90C4B319' \
   'https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.0/JetBrainsMono.tar.xz' \
   '0227b220360a6f819b9ead92343e8112b34733054782561af50cfba1e8afab63' \
   '/usr/share/keyrings/wezterm-fury.gpg' \
