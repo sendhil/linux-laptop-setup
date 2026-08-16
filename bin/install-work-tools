@@ -190,10 +190,24 @@ install_opencode() {
 
 install_pi() {
   tool_ready pi "$bin_dir/pi" && return
+
+  pi_root=$data_home/pi-node
+  pi_command=$pi_root/current/bin/pi
+  if [ -x "$pi_command" ]; then
+    link_command "$pi_command" "$bin_dir/pi"
+    return
+  fi
+
+  pi_stage_home=$tmp_dir/pi-home
+  mkdir -p -- "$pi_stage_home/.local/share" "$pi_root" || install_error 'Pi staging directory'
+  ln -s -- "$pi_root" "$pi_stage_home/.local/share/pi-node" || install_error 'Pi staged data directory'
   installer=$(download_installer pi https://pi.dev/install.sh)
   # Pi may offer its own private Node runtime when the IT image has no Node.
   # It remains under ~/.local/share/pi-node and is not a system/shared runtime.
-  HOME=$HOME sh "$installer" || install_error pi
+  HOME=$pi_stage_home XDG_DATA_HOME=$data_home ZDOTDIR=$pi_stage_home sh "$installer" || install_error pi
+  if [ -x "$pi_command" ]; then
+    link_command "$pi_command" "$bin_dir/pi"
+  fi
   [ -x "$bin_dir/pi" ] || install_error 'Pi verification'
 }
 

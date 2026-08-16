@@ -87,7 +87,7 @@ case $url in
     body='mkdir -p "$HOME/.opencode/bin"; printf "#!/bin/sh\\nexit 0\\n" >"$HOME/.opencode/bin/opencode"; chmod +x "$HOME/.opencode/bin/opencode"'
     ;;
   https://pi.dev/install.sh)
-    body='mkdir -p "$HOME/.local/bin"; printf "#!/bin/sh\\nexit 0\\n" >"$HOME/.local/bin/pi"; chmod +x "$HOME/.local/bin/pi"'
+    body='[ "${HOME##*/}" = pi-home ] || exit 51; [ "$ZDOTDIR" = "$HOME" ] || exit 52; mkdir -p "$HOME/.local/share/pi-node/current/bin"; printf "#!/bin/sh\\nexit 0\\n" >"$HOME/.local/share/pi-node/current/bin/pi"; chmod +x "$HOME/.local/share/pi-node/current/bin/pi"; printf "export PATH=changed\\n" >"$HOME/.zshrc"'
     ;;
   *) exit 3 ;;
 esac
@@ -117,10 +117,12 @@ assert_contains "$invalid_output" 'usage:' 'invalid work-tools input prints usag
 
 run_installer >/dev/null
 [ ! -e "$fake_home/.shrc" ] || fail 'pnpm installer modified the real shell configuration'
+[ ! -e "$fake_home/.zshrc" ] || fail 'Pi installer modified the real shell configuration'
 for command_name in herdr uv uvx bun bunx pnpm opencode pi; do
   [ -x "$fake_home/.local/bin/$command_name" ] || fail "$command_name was not installed into the user command directory"
 done
 assert_eq "$fake_home/.local/share/pnpm/bin/pnpm" "$(readlink "$fake_home/.local/bin/pnpm")" 'pnpm links the standalone binary from its current install layout'
+assert_eq "$fake_home/.local/share/pi-node/current/bin/pi" "$(readlink "$fake_home/.local/bin/pi")" 'Pi links the official private runtime command into the user command directory'
 actions=$(cat "$log")
 assert_contains "$actions" 'sudo -v' 'desktop installs preflight sudo'
 assert_contains "$actions" 'sudo snap install code --classic' 'VS Code uses the official snap'
@@ -162,6 +164,23 @@ assert_eq "$partial_home/.local/share/pnpm/bin/pnpm" "$(readlink "$partial_home/
 partial_actions=$(cat "$log")
 case $partial_actions in
   *'curl https://get.pnpm.io/install.sh'*) fail 'partial pnpm recovery downloaded the installer again' ;;
+esac
+
+partial_pi_home="$tmp_dir/pi-partial-home"
+mkdir -p "$partial_pi_home/.local/share/pi-node/current/bin"
+printf '#!/bin/sh\nexit 0\n' >"$partial_pi_home/.local/share/pi-node/current/bin/pi"
+chmod +x "$partial_pi_home/.local/share/pi-node/current/bin/pi"
+: >"$log"
+env HOME="$partial_pi_home" \
+  PATH="$fake_bin:/usr/bin:/bin" \
+  SETUP_OS_RELEASE="$os_release" \
+  SETUP_TEST_LOG="$log" \
+  "$repo_dir/bin/install-work-tools" >/dev/null
+[ -x "$partial_pi_home/.local/bin/pi" ] || fail 'partial Pi installation was not recovered'
+assert_eq "$partial_pi_home/.local/share/pi-node/current/bin/pi" "$(readlink "$partial_pi_home/.local/bin/pi")" 'partial Pi recovery links the existing official private-runtime command'
+partial_pi_actions=$(cat "$log")
+case $partial_pi_actions in
+  *'curl https://pi.dev/install.sh'*) fail 'partial Pi recovery downloaded the installer again' ;;
 esac
 
 conflict_home="$tmp_dir/conflict-home"
