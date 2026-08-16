@@ -44,5 +44,5 @@ docker run --rm \
     export GIT_CONFIG_KEY_0=safe.directory
     export GIT_CONFIG_VALUE_0=/repo
     bash tests/run
-    bash -n bin/bootstrap bin/audit bin/apply bin/doctor bin/audit-wine bin/install-sway-nvidia-session bin/install-wezterm bin/setup-work-laptop
+    bash -n bin/bootstrap bin/audit bin/apply bin/doctor bin/audit-wine bin/install-sway-nvidia-session bin/install-wezterm bin/install-work-tools bin/setup-work-laptop
   '

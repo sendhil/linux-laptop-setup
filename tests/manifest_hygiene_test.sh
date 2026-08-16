@@ -17,9 +17,14 @@ curl
 direnv
 fd-find
 fzf
+gh
 git
+git-lfs
+httpie
 jq
 kitty
+libatomic1
+lnav
 neovim 0.9.0
 pipx
 python3
@@ -28,6 +33,7 @@ shellcheck
 stow
 tmux
 tree
+unzip
 wezterm
 zoxide
 zsh
@@ -69,6 +75,28 @@ esac
 assert_eq '' "$(read_apt_file profiles/work.apt.txt)" "work APT manifest starts empty"
 assert_eq '' "$(read_tool_file npm manifests/npm.txt)" "npm manifest starts empty"
 assert_eq '' "$(read_tool_file uv manifests/uv-tools.txt)" "uv manifest starts empty"
+expected_work_tools=$(cat <<'EOF'
+bun
+bunx
+claude
+code
+codex
+difft
+dust
+eza
+herdr
+lazygit
+obsidian
+opencode
+pi
+pnpm
+uv
+uvx
+ya
+yazi
+EOF
+)
+assert_eq "$expected_work_tools" "$(read_tool_file command manifests/work-tools.txt)" "official work-tool manifest is reviewed"
 assert_eq "$(printf 'command\tdocker\ncommand\tkubectl\ncommand\tslack\ncommand\tzoom')" "$(load_external_assumptions work)" "work externals remain diagnostic-only"
 
 for apt_manifest in manifests/apt-*.txt profiles/*.apt.txt; do

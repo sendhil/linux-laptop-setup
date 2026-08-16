@@ -43,7 +43,7 @@ if [ "${SETUP_FAIL_STAGE:-}" = "$name" ]; then
 fi
 EOF
 chmod +x "$fake_repo/bin/fake-component"
-for component in bootstrap install-wezterm apply doctor install-sway-nvidia-session; do
+for component in bootstrap install-wezterm apply install-work-tools doctor install-sway-nvidia-session; do
   ln -s fake-component "$fake_repo/bin/$component"
 done
 
@@ -51,8 +51,23 @@ cat >"$fake_dotfiles/scripts/setup-local-laptop.sh" <<'EOF'
 #!/bin/bash
 printf 'setup-local-laptop %s\n' "$*" >>"$SETUP_TEST_LOG"
 mkdir -p "$HOME/.config/sway/local.d" "$HOME/.config/wezterm"
-printf '# Managed by dotfiles scripts/setup-local-laptop.sh.\n' >"$HOME/.config/sway/local.d/laptop.conf"
-printf '# Managed by dotfiles scripts/setup-local-laptop.sh.\n' >"$HOME/.config/wezterm/local.lua"
+cat >"$HOME/.config/sway/local.d/laptop.conf" <<'PROFILE'
+# Managed by dotfiles scripts/setup-local-laptop.sh.
+input "1:1:built_in_keyboard" {
+    xkb_options altwin:swap_lalt_lwin
+}
+input "1:1:built_in_touchpad" {
+    tap enabled
+    tap_button_map lrm
+    natural_scroll enabled
+}
+PROFILE
+cat >"$HOME/.config/wezterm/local.lua" <<'PROFILE'
+# Managed by dotfiles scripts/setup-local-laptop.sh.
+return {
+  font_size = 17,
+}
+PROFILE
 EOF
 chmod +x "$fake_dotfiles/scripts/setup-local-laptop.sh"
 
@@ -135,7 +150,7 @@ broken_status=$?
 set -e
 assert_eq 2 "$broken_status" 'coordinator rejects unhealthy dpkg state'
 assert_contains "$broken_output" 'sudo bin/audit-wine' 'dpkg rejection points to the read-only Wine diagnostic'
-if grep -Eq 'bootstrap|install-wezterm|apply|make|doctor' "$log"; then
+if grep -Eq 'bootstrap|install-wezterm|apply|install-work-tools|make|doctor' "$log"; then
   fail 'coordinator mutated after detecting unhealthy dpkg state'
 fi
 
@@ -152,6 +167,7 @@ for action in \
   'bootstrap ' \
   'install-wezterm ' \
   'apply work' \
+  'install-work-tools ' \
   "make -C $fake_dotfiles preflight-ubuntu" \
   "make -C $fake_dotfiles stow-ubuntu" \
   "sway --validate -c $fake_home/.config/sway/config" \
@@ -187,6 +203,12 @@ assert_not_contains "$(cat "$log")" 'setup-local-laptop' \
   'converged Sway rerun preserves the managed local profile'
 
 : >"$log"
+printf '# Managed by dotfiles scripts/setup-local-laptop.sh.\n' >"$fake_home/.config/sway/local.d/laptop.conf"
+run_setup SWAYSOCK="$tmp_dir/sway.sock" >/dev/null
+assert_contains "$(cat "$log")" 'setup-local-laptop --font-size 17' \
+  'legacy managed profile is upgraded with current laptop-local defaults'
+
+: >"$log"
 set +e
 failure_output=$(run_setup SETUP_FAIL_STAGE=apply SETUP_FAIL_STATUS=1 2>&1)
 failure_status=$?
@@ -194,5 +216,14 @@ set -e
 assert_eq 1 "$failure_status" 'coordinator propagates delegated operational failure'
 assert_contains "$failure_output" 'rerun:' 'delegated failure prints the coordinator rerun command'
 assert_not_contains "$(cat "$log")" 'make ' 'coordinator stops after package apply failure'
+
+: >"$log"
+set +e
+failure_output=$(run_setup SETUP_FAIL_STAGE=install-work-tools SETUP_FAIL_STATUS=1 2>&1)
+failure_status=$?
+set -e
+assert_eq 1 "$failure_status" 'coordinator propagates work-tool installation failure'
+assert_contains "$failure_output" 'rerun:' 'work-tool failure prints the coordinator rerun command'
+assert_not_contains "$(cat "$log")" 'make ' 'coordinator stops after work-tool installation failure'
 
 printf 'ok - resumable two-pass work-laptop coordinator\n'

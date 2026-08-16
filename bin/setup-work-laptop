@@ -100,6 +100,7 @@ fi
 run_stage bootstrap "$repo_dir/bin/bootstrap"
 run_stage install-wezterm "$repo_dir/bin/install-wezterm"
 run_stage apply "$repo_dir/bin/apply" "$profile"
+run_stage install-work-tools "$repo_dir/bin/install-work-tools"
 run_stage dotfiles-preflight make -C "$dotfiles_dir" preflight-ubuntu
 run_stage dotfiles-link make -C "$dotfiles_dir" stow-ubuntu
 
@@ -153,6 +154,12 @@ local_profile_ready() {
     [ -f "$local_file" ] && [ ! -L "$local_file" ] || return 1
     [ "$(sed -n '1p' "$local_file" 2>/dev/null)" = "$marker" ] || return 1
   done
+  grep -Fq 'xkb_options altwin:swap_lalt_lwin' "$sway_local" || return 1
+  grep -Fq 'tap enabled' "$sway_local" || return 1
+  grep -Fq 'tap_button_map lrm' "$sway_local" || return 1
+  grep -Fq 'natural_scroll enabled' "$sway_local" || return 1
+  grep -Eq '^[[:space:]]*font_size[[:space:]]*=[[:space:]]*17,?[[:space:]]*$' \
+    "$wezterm_local" || return 1
 }
 
 if is_sway_session; then

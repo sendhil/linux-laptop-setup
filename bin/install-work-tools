@@ -1,0 +1,293 @@
+#!/bin/bash
+
+set -u
+
+usage() {
+  printf 'usage: %s\n' "$0" >&2
+}
+
+configuration_error() {
+  printf 'error: %s\n' "$1" >&2
+  exit 2
+}
+
+install_error() {
+  printf 'error: failed to install work tool: %s\n' "$1" >&2
+  printf 'rerun: bin/install-work-tools\n' >&2
+  exit 1
+}
+
+[ "$#" -eq 0 ] || {
+  usage
+  exit 2
+}
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
+cd "$repo_dir" || exit 2
+
+. "$repo_dir/lib/platform.sh"
+
+os_release=${SETUP_OS_RELEASE:-/etc/os-release}
+load_ubuntu_info "$os_release" || exit 2
+case $UBUNTU_VERSION_ID in
+  22.04|24.04) : ;;
+  *) configuration_error "unsupported Ubuntu release for work tools: $UBUNTU_VERSION_ID" ;;
+esac
+architecture=$(detect_arch) || exit 2
+[ "$architecture" = amd64 ] || configuration_error "unsupported work-tool architecture: $architecture"
+[ "$(id -u)" -ne 0 ] || configuration_error 'run this installer as your normal user, not as root'
+
+case ${HOME:-} in
+  /*) : ;;
+  *) configuration_error 'HOME must be an absolute path' ;;
+esac
+case $HOME in
+  *$'\n'*|*$'\r'*) configuration_error 'HOME contains control characters' ;;
+esac
+
+data_home=${XDG_DATA_HOME:-$HOME/.local/share}
+case $data_home in
+  /*) : ;;
+  *) data_home=$HOME/.local/share ;;
+esac
+bin_dir=$HOME/.local/bin
+managed_root=$data_home/work-laptop-tools
+
+for command_name in awk bash chmod cp curl dirname dpkg find grep id install jq ln mkdir mktemp mv readlink rm sed sh snap sudo tar tr unzip; do
+  command -v "$command_name" >/dev/null 2>&1 || configuration_error "unavailable command: $command_name"
+done
+
+tool_ready() {
+  command -v "$1" >/dev/null 2>&1 || [ -x "$2" ]
+}
+
+preflight_target() {
+  command_name=$1
+  target=$2
+  tool_ready "$command_name" "$target" && return 0
+  if [ -e "$target" ] || [ -L "$target" ]; then
+    configuration_error "refusing to overwrite conflicting command: $target"
+  fi
+}
+
+# Validate every user-owned command target before the first download, sudo
+# prompt, directory creation, or package-manager mutation.
+for command_target in \
+  "herdr:$bin_dir/herdr" \
+  "codex:$bin_dir/codex" \
+  "claude:$bin_dir/claude" \
+  "uv:$bin_dir/uv" \
+  "uvx:$bin_dir/uvx" \
+  "bun:$bin_dir/bun" \
+  "bunx:$bin_dir/bunx" \
+  "pnpm:$bin_dir/pnpm" \
+  "opencode:$bin_dir/opencode" \
+  "pi:$bin_dir/pi" \
+  "lazygit:$bin_dir/lazygit" \
+  "difft:$bin_dir/difft" \
+  "eza:$bin_dir/eza" \
+  "yazi:$bin_dir/yazi" \
+  "ya:$bin_dir/ya" \
+  "dust:$bin_dir/dust"; do
+  preflight_target "${command_target%%:*}" "${command_target#*:}"
+done
+
+need_snap=0
+for desktop_command in code obsidian; do
+  if ! command -v "$desktop_command" >/dev/null 2>&1 && ! snap list "$desktop_command" >/dev/null 2>&1; then
+    need_snap=1
+  fi
+done
+if [ "$need_snap" -eq 1 ]; then
+  sudo -v || configuration_error 'sudo authorization is required for desktop application installation'
+fi
+
+tmp_dir=$(mktemp -d) || configuration_error 'cannot create a temporary directory'
+cleanup() {
+  rm -rf -- "$tmp_dir"
+}
+trap cleanup EXIT HUP INT TERM
+
+mkdir -p -- "$bin_dir" "$data_home" || install_error 'user command directories'
+export PATH="$bin_dir:$PATH"
+
+download_installer() {
+  name=$1
+  url=$2
+  destination=$tmp_dir/$name.install
+  curl -fL --retry 3 --connect-timeout 10 --max-time 120 -o "$destination" "$url" || install_error "$name download"
+  [ -s "$destination" ] || install_error "$name empty installer"
+  printf '%s\n' "$destination"
+}
+
+link_command() {
+  source_path=$1
+  target_path=$2
+  [ -x "$source_path" ] || install_error "missing installed command: $source_path"
+  if [ -x "$target_path" ]; then
+    return 0
+  fi
+  link_temp=$target_path.setup.$$
+  ln -s -- "$source_path" "$link_temp" || install_error "link $target_path"
+  mv -f -- "$link_temp" "$target_path" || install_error "activate $target_path"
+}
+
+install_herdr() {
+  tool_ready herdr "$bin_dir/herdr" && return
+  installer=$(download_installer herdr https://herdr.dev/install.sh)
+  HERDR_INSTALL_DIR=$bin_dir sh "$installer" || install_error herdr
+  [ -x "$bin_dir/herdr" ] || install_error 'herdr verification'
+}
+
+install_codex() {
+  tool_ready codex "$bin_dir/codex" && return
+  installer=$(download_installer codex https://chatgpt.com/codex/install.sh)
+  CODEX_INSTALL_DIR=$bin_dir CODEX_NON_INTERACTIVE=true sh "$installer" || install_error codex
+  [ -x "$bin_dir/codex" ] || install_error 'codex verification'
+}
+
+install_claude() {
+  tool_ready claude "$bin_dir/claude" && return
+  installer=$(download_installer claude https://claude.ai/install.sh)
+  HOME=$HOME bash "$installer" stable || install_error claude
+  [ -x "$bin_dir/claude" ] || install_error 'claude verification'
+}
+
+install_uv() {
+  if tool_ready uv "$bin_dir/uv" && tool_ready uvx "$bin_dir/uvx"; then
+    return
+  fi
+  installer=$(download_installer uv https://astral.sh/uv/install.sh)
+  XDG_BIN_HOME=$bin_dir INSTALLER_NO_MODIFY_PATH=1 sh "$installer" || install_error uv
+  [ -x "$bin_dir/uv" ] && [ -x "$bin_dir/uvx" ] || install_error 'uv verification'
+}
+
+install_bun() {
+  if tool_ready bun "$bin_dir/bun" && tool_ready bunx "$bin_dir/bunx"; then
+    return
+  fi
+  bun_root=$data_home/bun
+  stage_home=$tmp_dir/bun-home
+  mkdir -p -- "$stage_home" || install_error 'Bun staging directory'
+  installer=$(download_installer bun https://bun.sh/install)
+  HOME=$stage_home BUN_INSTALL=$bun_root PATH="$bun_root/bin:$PATH" SHELL=/bin/sh bash "$installer" || install_error bun
+  link_command "$bun_root/bin/bun" "$bin_dir/bun"
+  if [ -x "$bun_root/bin/bunx" ]; then
+    link_command "$bun_root/bin/bunx" "$bin_dir/bunx"
+  else
+    link_command "$bun_root/bin/bun" "$bin_dir/bunx"
+  fi
+}
+
+install_pnpm() {
+  tool_ready pnpm "$bin_dir/pnpm" && return
+  pnpm_root=$data_home/pnpm
+  stage_home=$tmp_dir/pnpm-home
+  mkdir -p -- "$stage_home" || install_error 'pnpm staging directory'
+  installer=$(download_installer pnpm https://get.pnpm.io/install.sh)
+  HOME=$stage_home PNPM_HOME=$pnpm_root SHELL=/bin/sh sh "$installer" || install_error pnpm
+  link_command "$pnpm_root/pnpm" "$bin_dir/pnpm"
+}
+
+install_opencode() {
+  tool_ready opencode "$bin_dir/opencode" && return
+  installer=$(download_installer opencode https://opencode.ai/install)
+  HOME=$HOME bash "$installer" --no-modify-path || install_error opencode
+  link_command "$HOME/.opencode/bin/opencode" "$bin_dir/opencode"
+}
+
+install_pi() {
+  tool_ready pi "$bin_dir/pi" && return
+  installer=$(download_installer pi https://pi.dev/install.sh)
+  # Pi may offer its own private Node runtime when the IT image has no Node.
+  # It remains under ~/.local/share/pi-node and is not a system/shared runtime.
+  HOME=$HOME sh "$installer" || install_error pi
+  [ -x "$bin_dir/pi" ] || install_error 'Pi verification'
+}
+
+github_release_install() {
+  tool=$1
+  command_name=$2
+  repository=$3
+  asset_regex=$4
+  archive_kind=$5
+  target=$bin_dir/$command_name
+  tool_ready "$command_name" "$target" && return
+
+  metadata=$tmp_dir/$tool.release.json
+  curl -fL --retry 3 --connect-timeout 10 --max-time 60 \
+    -o "$metadata" "https://api.github.com/repos/$repository/releases/latest" || install_error "$tool release metadata"
+  tag=$(jq -r '.tag_name // empty' "$metadata") || install_error "$tool release tag"
+  case $tag in
+    ''|*[!A-Za-z0-9._+-]*) install_error "$tool invalid release tag" ;;
+  esac
+  asset_url=$(jq -r --arg pattern "$asset_regex" \
+    '[.assets[]?.browser_download_url | select(test($pattern))] | if length == 1 then .[0] else empty end' \
+    "$metadata") || install_error "$tool release asset"
+  case $asset_url in
+    "https://github.com/$repository/releases/download/"*) : ;;
+    *) install_error "$tool missing or untrusted release asset" ;;
+  esac
+
+  archive=$tmp_dir/$tool.archive
+  curl -fL --retry 3 --connect-timeout 10 --max-time 300 -o "$archive" "$asset_url" || install_error "$tool archive"
+  extract_dir=$tmp_dir/$tool.extract
+  archive_entries=$tmp_dir/$tool.entries
+  mkdir -p -- "$extract_dir" || install_error "$tool extraction directory"
+  case $archive_kind in
+    tar)
+      tar -tzf "$archive" >"$archive_entries" || install_error "$tool archive listing"
+      if grep -Eq '(^|/)\.\.(/|$)|^/' "$archive_entries"; then
+        install_error "$tool unsafe archive"
+      fi
+      tar -xzf "$archive" -C "$extract_dir" || install_error "$tool extraction"
+      ;;
+    zip)
+      unzip -Z1 "$archive" >"$archive_entries" || install_error "$tool archive listing"
+      if grep -Eq '(^|/)\.\.(/|$)|^/' "$archive_entries"; then
+        install_error "$tool unsafe archive"
+      fi
+      unzip -q "$archive" -d "$extract_dir" || install_error "$tool extraction"
+      ;;
+    *) install_error "$tool unsupported archive" ;;
+  esac
+  matches=()
+  while IFS= read -r -d '' match; do
+    matches[${#matches[@]}]=$match
+  done < <(find "$extract_dir" -type f -name "$command_name" -print0)
+  [ "${#matches[@]}" -eq 1 ] || install_error "$tool archive command"
+  version_dir=$managed_root/$tool/$tag
+  mkdir -p -- "$version_dir" || install_error "$tool version directory"
+  install -m 0755 -- "${matches[0]}" "$version_dir/$command_name" || install_error "$tool binary"
+  link_command "$version_dir/$command_name" "$target"
+}
+
+install_snap_app() {
+  command_name=$1
+  if command -v "$command_name" >/dev/null 2>&1 || snap list "$command_name" >/dev/null 2>&1; then
+    return
+  fi
+  sudo snap install "$command_name" --classic || install_error "$command_name"
+}
+
+install_herdr
+install_codex
+install_claude
+install_uv
+install_bun
+install_pnpm
+install_opencode
+install_pi
+
+github_release_install lazygit lazygit jesseduffield/lazygit '^.*/lazygit_[^/]+_Linux_x86_64\.tar\.gz$' tar
+github_release_install difftastic difft Wilfred/difftastic '^.*/difft-x86_64-unknown-linux-gnu\.tar\.gz$' tar
+github_release_install eza eza eza-community/eza '^.*/eza_x86_64-unknown-linux-gnu\.tar\.gz$' tar
+github_release_install yazi yazi sxyazi/yazi '^.*/yazi-x86_64-unknown-linux-gnu\.zip$' zip
+github_release_install yazi ya sxyazi/yazi '^.*/yazi-x86_64-unknown-linux-gnu\.zip$' zip
+github_release_install dust dust bootandy/dust '^.*/dust-v[^/]+-x86_64-unknown-linux-gnu\.tar\.gz$' tar
+
+install_snap_app code
+install_snap_app obsidian
+
+printf 'Work tools are installed.\n'

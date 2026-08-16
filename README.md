@@ -27,8 +27,8 @@ software stages, preflights and links the dotfiles, validates the standard
 Sway session or installs the separate NVIDIA test session, and runs doctor.
 Log out through GDM and select the session it reports.
 Then rerun the same command inside Sway.
-The second pass creates the laptop-local built-in-keyboard swap
-and WezTerm font-size-17 override when they are not already managed, reruns
+The second pass creates the laptop-local built-in-keyboard swap, built-in
+touchpad behavior, and WezTerm font-size-17 override when they are not already managed, reruns
 doctor in Sway, and points to the physical checklist. Safe completed stages
 are rediscovered, so the exact command is also the supported recovery path.
 
@@ -41,6 +41,7 @@ bin/bootstrap
 bin/install-wezterm
 bin/audit work
 bin/apply work
+bin/install-work-tools
 bin/audit work
 bin/doctor work
 ```
@@ -68,6 +69,17 @@ pre-existing zero-byte regular `wezterm.list` left by an interrupted setup,
 but it refuses symlinks, non-regular paths, and any nonempty differing source
 instead of silently replacing administrator-managed configuration.
 
+`bin/install-work-tools` installs the reviewed user-facing work tools that are
+not supplied by Ubuntu. It uses the vendors' official installers for Herdr,
+Codex CLI, Claude Code, uv/uvx, Bun/bunx, standalone pnpm, OpenCode, and Pi;
+official GitHub releases for lazygit, difftastic (`difft`), eza, yazi/ya, and
+dust; and the official Snap packages for VS Code and Obsidian. Downloads and
+user-owned command destinations are preflighted before mutation, completed
+tools are skipped on rerun, and conflicting files are never overwritten.
+The setup does not own a shared Node/npm installation. Pi may keep its own
+private runtime under the user's XDG data directory when the IT image has no
+Node. Ubuntu APT supplies `gh`, Git LFS, HTTPie, lnav, and supporting packages.
+
 The first `bin/audit work` is read-only. On a clean laptop it normally reports
 drift and exits `1`. Review that report and the manifests before running
 `bin/apply work`. Apply validates its complete plan first, installs only
@@ -87,6 +99,7 @@ workflows should use the `bin/` commands directly.
 | `bin/setup-work-laptop work DOTFILES_CHECKOUT` | current pass is complete | delegated installation, link, validation, or operational check failed | usage, platform, privilege, package-database, checkout, or local-profile conflict |
 | `bin/bootstrap` | prerequisites are ready | prerequisite installation failed | usage, platform, inventory, or privilege prerequisite error |
 | `bin/install-wezterm` | official repository, package, and font are ready | download, package, font, or verification failed | usage, platform, dependency, conflict, architecture, or privilege error |
+| `bin/install-work-tools` | reviewed work tools are installed or already present | a vendor, release, Snap, or verification step failed | usage, platform, dependency, destination-conflict, architecture, or privilege error |
 | `bin/audit work` | declared state is converged | missing or incompatible declared software | invalid configuration or unavailable/broken inventory manager |
 | `bin/apply work` | plan applied or already converged | a package/tool installation failed | usage, manifest, platform, inventory, candidate, or privilege preflight error |
 | `bin/doctor work` | no owned operational check failed | one or more owned operational checks failed | usage, manifest, or platform configuration error |
@@ -117,6 +130,8 @@ The supported profile is assembled from small reviewed manifests:
 - `manifests/apt-common.txt` owns shared command-line and development packages,
   including WezTerm after `bin/install-wezterm` configures its reviewed source.
 - `manifests/apt-sway.txt` owns the Sway session and laptop integration packages.
+- `manifests/work-tools.txt` records commands installed by the explicit
+  `bin/install-work-tools` vendor/release/Snap stage.
 - `profiles/work.apt.txt` is reserved for workplace-specific APT packages this
   repository has explicitly agreed to own.
 - `manifests/npm.txt` and `manifests/uv-tools.txt` own reviewed developer tools
@@ -132,9 +147,10 @@ external ownership.
 
 Package-source policy is deliberately conservative: prefer Ubuntu packages
 for system and desktop integration; use npm or uv only for reviewed manifests;
-do not add a PPA, vendor repository, or source build silently. The only
-supported vendor repository is the official signed WezTerm source configured
-by the explicit `bin/install-wezterm` command. If Ubuntu cannot meet a declared
+do not add a PPA, vendor repository, or source build silently. The supported
+exceptions are the official signed WezTerm source configured by
+`bin/install-wezterm` and the explicit, enumerated sources used by
+`bin/install-work-tools`. If Ubuntu cannot meet a declared
 version floor, audit reports the incompatibility and apply stops before
 mutation. Resolve that case explicitly with IT or update the reviewed manifest.
 
@@ -155,8 +171,9 @@ delete existing home-directory files; resolve every reported Stow conflict
 explicitly. The dotfiles setup provides the Sway configuration and portable
 local/SSH shell behavior. On the second pass inside Sway it also invokes the
 dotfiles laptop helper when no managed local profile exists. That helper
-targets only the selected built-in keyboard, leaves external keyboards
-unchanged, and writes a local WezTerm font-size-17 override. Those ignored
+targets only the selected built-in keyboard and touchpad, leaves external
+keyboards and pointers unchanged, enables natural scrolling plus tap-to-click
+with two-finger right-click, and writes a local WezTerm font-size-17 override. Those ignored
 machine-local files are never Stowed or shared with another computer.
 
 ## Sway, GDM, and GNOME

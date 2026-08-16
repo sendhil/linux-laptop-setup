@@ -20,6 +20,7 @@ cd "$repo_dir" || exit 2
 apt_requirements=$(load_apt_requirements "$profile") || exit 2
 npm_requirements=$(read_tool_file npm manifests/npm.txt) || exit 2
 uv_requirements=$(read_tool_file uv manifests/uv-tools.txt) || exit 2
+work_tool_requirements=$(read_tool_file command manifests/work-tools.txt) || exit 2
 external_assumptions=$(load_external_assumptions "$profile") || exit 2
 
 policy_agent=${SETUP_POLICY_AGENT:-/usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1}
@@ -204,7 +205,7 @@ while IFS=$'\t' read -r package _required; do
   case $package in
     bat) check_command batcat ;;
     blueman) check_command blueman-applet ;;
-    brightnessctl|curl|direnv|fzf|git|grim|jq|kitty|pipx|pipewire|playerctl|python3|shellcheck|slurp|stow|sway|swayidle|swaylock|tmux|tree|waybar|wireplumber|wofi|zoxide)
+    brightnessctl|curl|direnv|fzf|gh|git|git-lfs|grim|jq|kitty|lnav|pipx|pipewire|playerctl|python3|shellcheck|slurp|stow|sway|swayidle|swaylock|tmux|tree|unzip|waybar|wireplumber|wofi|zoxide)
       check_command "$package"
       ;;
     build-essential) check_command make ;;
@@ -214,6 +215,7 @@ while IFS=$'\t' read -r package _required; do
     network-manager-gnome) check_command nm-applet ;;
     neovim) check_command nvim ;;
     ripgrep) check_command rg ;;
+    httpie) check_command http ;;
     wl-clipboard)
       check_command wl-copy
       check_command wl-paste
@@ -225,6 +227,11 @@ while IFS=$'\t' read -r package _required; do
     xwayland) check_command Xwayland ;;
   esac
 done <<<"$apt_requirements"
+
+while IFS= read -r command_name; do
+  [ -n "$command_name" ] || continue
+  check_command "$command_name"
+done <<<"$work_tool_requirements"
 
 if [ -n "$npm_requirements" ]; then
   check_command npm

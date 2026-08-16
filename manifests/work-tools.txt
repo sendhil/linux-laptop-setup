@@ -1,0 +1,19 @@
+# Commands installed by bin/install-work-tools from official vendor sources.
+bun
+bunx
+claude
+code
+codex
+difft
+dust
+eza
+herdr
+lazygit
+obsidian
+opencode
+pi
+pnpm
+uv
+uvx
+ya
+yazi
