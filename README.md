@@ -72,10 +72,17 @@ instead of silently replacing administrator-managed configuration.
 `bin/install-work-tools` installs the reviewed user-facing work tools that are
 not supplied by Ubuntu. It uses the vendors' official installers for Herdr,
 uv/uvx, Bun/bunx, standalone pnpm, OpenCode, and Pi;
+the pinned Go 1.26.5 Linux amd64 archive from
+`https://go.dev/dl/go1.26.5.linux-amd64.tar.gz` after verifying SHA-256
+`5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053`;
 official GitHub releases for difftastic (`difft`), eza, yazi/ya, and dust; and
 the official Snap packages for VS Code and Obsidian. Downloads and
 user-owned command destinations are preflighted before mutation, completed
-tools are skipped on rerun, and conflicting files are never overwritten.
+tools are skipped on rerun, and conflicting files are never overwritten. Go
+is extracted under `$XDG_DATA_HOME/work-laptop-tools/go/go1.26.5` (or the
+user's default XDG data directory) and exposed only through
+`$HOME/.local/bin/go`; system Go installations and shell startup files are
+left untouched.
 The setup does not own a shared Node/npm installation. Pi may keep its own
 private runtime under the user's XDG data directory when the IT image has no
 Node. Ubuntu APT supplies `gh`, Git LFS, HTTPie, lnav, and supporting packages.

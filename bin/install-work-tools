@@ -53,8 +53,12 @@ case $data_home in
 esac
 bin_dir=$HOME/.local/bin
 managed_root=$data_home/work-laptop-tools
+go_version=1.26.5
+go_archive_name=go${go_version}.linux-amd64.tar.gz
+go_archive_url=https://go.dev/dl/$go_archive_name
+go_archive_sha256=5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053
 
-for command_name in awk bash chmod cp curl dirname dpkg find grep id install jq ln mkdir mktemp mv readlink rm sed sh snap sudo tar tr unzip; do
+for command_name in awk bash chmod cp curl dirname dpkg find grep id install jq ln mkdir mktemp mv readlink rm sed sha256sum sh snap sudo tar tr unzip; do
   command -v "$command_name" >/dev/null 2>&1 || configuration_error "unavailable command: $command_name"
 done
 
@@ -65,6 +69,11 @@ tool_ready() {
 preflight_target() {
   command_name=$1
   target=$2
+  if [ "$command_name" = go ] && { [ -e "$target" ] || [ -L "$target" ]; }; then
+    [ -f "$target" ] && [ -x "$target" ] || \
+      configuration_error "refusing to overwrite conflicting command: $target"
+    return 0
+  fi
   tool_ready "$command_name" "$target" && return 0
   if [ -e "$target" ] || [ -L "$target" ]; then
     configuration_error "refusing to overwrite conflicting command: $target"
@@ -82,6 +91,7 @@ for command_target in \
   "pnpm:$bin_dir/pnpm" \
   "opencode:$bin_dir/opencode" \
   "pi:$bin_dir/pi" \
+  "go:$bin_dir/go" \
   "difft:$bin_dir/difft" \
   "eza:$bin_dir/eza" \
   "yazi:$bin_dir/yazi" \
@@ -210,6 +220,75 @@ install_pi() {
   [ -x "$bin_dir/pi" ] || install_error 'Pi verification'
 }
 
+install_go() {
+  go_parent=$managed_root/go
+  go_version_dir=$go_parent/go$go_version
+  go_root=$go_version_dir/go
+  go_command=$go_root/bin/go
+
+  if [ -e "$bin_dir/go" ] || [ -L "$bin_dir/go" ]; then
+    tool_ready go "$bin_dir/go" && return
+  fi
+  if [ ! -e "$go_version_dir" ] && [ ! -L "$go_version_dir" ]; then
+    tool_ready go "$bin_dir/go" && return
+  fi
+
+  for go_directory in "$managed_root" "$go_parent"; do
+    if [ -L "$go_directory" ]; then
+      configuration_error "refusing to use symlinked Go directory: $go_directory"
+    fi
+    if [ -e "$go_directory" ] && [ ! -d "$go_directory" ]; then
+      configuration_error "refusing to use non-directory Go path: $go_directory"
+    fi
+  done
+
+  if [ -L "$go_version_dir" ]; then
+    configuration_error "refusing to overwrite symlinked Go directory: $go_version_dir"
+  fi
+  if [ -e "$go_version_dir" ]; then
+    [ -d "$go_version_dir" ] || \
+      configuration_error "refusing to overwrite non-directory Go target: $go_version_dir"
+    [ -d "$go_root" ] && [ ! -L "$go_root" ] && \
+      [ -d "$go_root/bin" ] && [ ! -L "$go_root/bin" ] && \
+      [ -f "$go_command" ] && [ ! -L "$go_command" ] && [ -x "$go_command" ] || \
+      configuration_error "refusing to overwrite incomplete Go installation: $go_version_dir"
+    link_command "$go_command" "$bin_dir/go"
+    return
+  fi
+
+  archive=$tmp_dir/$go_archive_name
+  curl -fL --retry 3 --connect-timeout 10 --max-time 300 \
+    -o "$archive" "$go_archive_url" || install_error 'go archive download'
+  [ -s "$archive" ] || install_error 'go archive empty'
+  printf '%s  %s\n' "$go_archive_sha256" "$archive" |
+    sha256sum --check --status || install_error 'go archive checksum'
+
+  archive_entries=$tmp_dir/go.entries
+  tar -tzf "$archive" >"$archive_entries" || install_error 'Go archive listing'
+  [ -s "$archive_entries" ] || install_error 'empty Go archive'
+  while IFS= read -r archive_member; do
+    case /$archive_member/ in
+      *'/../'*|*'/./'*|//*|*$'\n'*|*$'\r'*) install_error 'unsafe Go archive path' ;;
+    esac
+  done <"$archive_entries"
+  grep -Fxq 'go/bin/go' "$archive_entries" || \
+    install_error 'Go archive missing go/bin/go'
+
+  go_extract=$tmp_dir/go-extract
+  mkdir -p "$go_extract" || install_error 'Go staging directory'
+  tar -xzf "$archive" -C "$go_extract" --no-same-owner --no-same-permissions || \
+    install_error 'Go archive extraction'
+  [ -d "$go_extract/go" ] && [ ! -L "$go_extract/go" ] && \
+    [ -d "$go_extract/go/bin" ] && [ ! -L "$go_extract/go/bin" ] && \
+    [ -f "$go_extract/go/bin/go" ] && [ ! -L "$go_extract/go/bin/go" ] && \
+    [ -x "$go_extract/go/bin/go" ] || install_error 'Go archive missing executable go/bin/go'
+
+  mkdir -p "$go_version_dir" || install_error 'Go version directory'
+  mv -- "$go_extract/go" "$go_version_dir/go" || install_error 'Go installation'
+  [ -x "$go_command" ] || install_error 'Go verification'
+  link_command "$go_command" "$bin_dir/go"
+}
+
 github_release_install() {
   tool=$1
   command_name=$2
@@ -281,6 +360,7 @@ install_bun
 install_pnpm
 install_opencode
 install_pi
+install_go
 
 github_release_install difftastic difft Wilfred/difftastic '^.*/difft-x86_64-unknown-linux-gnu\.tar\.gz$' tar
 github_release_install eza eza eza-community/eza '^.*/eza_x86_64-unknown-linux-gnu\.tar\.gz$' tar

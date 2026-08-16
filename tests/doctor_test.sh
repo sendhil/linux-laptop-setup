@@ -75,7 +75,7 @@ VERSION_ID="24.04"
 VERSION_CODENAME=noble
 EOF
 
-owned_commands='bash batcat blueman-applet brightnessctl bun bunx code curl difft direnv dust eza fc-match fzf gh git git-lfs grim herdr http jq kitty lnav mako make nm-applet notify-send nvim obsidian opencode pi pipx pipewire playerctl pnpm python3 rg shellcheck slurp stow sway swayidle swaylock tmux tree unzip uv uvx waybar wezterm wireplumber wl-copy wl-paste wofi Xwayland ya yazi zoxide zsh'
+owned_commands='bash batcat blueman-applet brightnessctl bun bunx code curl difft direnv dust eza fc-match fzf gh git git-lfs go grim herdr http jq kitty lnav mako make nm-applet notify-send nvim obsidian opencode pi pipx pipewire playerctl pnpm python3 rg shellcheck slurp stow sway swayidle swaylock tmux tree unzip uv uvx waybar wezterm wireplumber wl-copy wl-paste wofi Xwayland ya yazi zoxide zsh'
 external_commands='docker kubectl zoom'
 
 make_success_command() {
@@ -276,6 +276,7 @@ rm "$test_repo/manifests/apt-common.txt.bak"
 run_doctor
 assert_eq 0 "$doctor_status" 'healthy owned commands succeed despite missing external software'
 assert_contains "$doctor_output" 'PASS command: nvim' 'owned Neovim command passes'
+assert_contains "$doctor_output" 'PASS command: go' 'owned Go command passes'
 assert_contains "$doctor_output" 'PASS command: wofi' 'owned Wofi command passes'
 assert_contains "$doctor_output" 'PASS command: wezterm' 'owned WezTerm command passes'
 assert_contains "$doctor_output" 'PASS font: JetBrainsMono Nerd Font Mono' \

@@ -82,6 +82,7 @@ code
 difft
 dust
 eza
+go
 herdr
 obsidian
 opencode
