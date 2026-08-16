@@ -81,7 +81,7 @@ case $url in
     body='mkdir -p "$BUN_INSTALL/bin"; for c in bun bunx; do printf "#!/bin/sh\\nexit 0\\n" >"$BUN_INSTALL/bin/$c"; chmod +x "$BUN_INSTALL/bin/$c"; done'
     ;;
   https://get.pnpm.io/install.sh)
-    body='[ "${SHELL:-}" = /bin/sh ] || exit 41; [ "${ENV:-}" = "$HOME/.shrc" ] || exit 42; [ -f "$ENV" ] || exit 43; printf "export PNPM_HOME=%s\\n" "$PNPM_HOME" >>"$ENV"; mkdir -p "$PNPM_HOME"; printf "#!/bin/sh\\nexit 0\\n" >"$PNPM_HOME/pnpm"; chmod +x "$PNPM_HOME/pnpm"'
+    body='[ "${SHELL:-}" = /bin/sh ] || exit 41; [ "${ENV:-}" = "$HOME/.shrc" ] || exit 42; [ -f "$ENV" ] || exit 43; printf "export PNPM_HOME=%s\\n" "$PNPM_HOME" >>"$ENV"; mkdir -p "$PNPM_HOME/bin"; printf "#!/bin/sh\\nexit 0\\n" >"$PNPM_HOME/bin/pnpm"; chmod +x "$PNPM_HOME/bin/pnpm"'
     ;;
   https://opencode.ai/install)
     body='mkdir -p "$HOME/.opencode/bin"; printf "#!/bin/sh\\nexit 0\\n" >"$HOME/.opencode/bin/opencode"; chmod +x "$HOME/.opencode/bin/opencode"'
@@ -120,6 +120,7 @@ run_installer >/dev/null
 for command_name in herdr uv uvx bun bunx pnpm opencode pi; do
   [ -x "$fake_home/.local/bin/$command_name" ] || fail "$command_name was not installed into the user command directory"
 done
+assert_eq "$fake_home/.local/share/pnpm/bin/pnpm" "$(readlink "$fake_home/.local/bin/pnpm")" 'pnpm links the standalone binary from its current install layout'
 actions=$(cat "$log")
 assert_contains "$actions" 'sudo -v' 'desktop installs preflight sudo'
 assert_contains "$actions" 'sudo snap install code --classic' 'VS Code uses the official snap'
@@ -145,6 +146,23 @@ before=$(wc -l <"$log")
 run_installer >/dev/null
 after=$(wc -l <"$log")
 assert_eq "$before" "$after" 'converged work-tools rerun performs no installation work'
+
+partial_home="$tmp_dir/partial-home"
+mkdir -p "$partial_home/.local/share/pnpm/bin"
+printf '#!/bin/sh\nexit 0\n' >"$partial_home/.local/share/pnpm/bin/pnpm"
+chmod +x "$partial_home/.local/share/pnpm/bin/pnpm"
+: >"$log"
+env HOME="$partial_home" \
+  PATH="$fake_bin:/usr/bin:/bin" \
+  SETUP_OS_RELEASE="$os_release" \
+  SETUP_TEST_LOG="$log" \
+  "$repo_dir/bin/install-work-tools" >/dev/null
+[ -x "$partial_home/.local/bin/pnpm" ] || fail 'partial pnpm installation was not recovered'
+assert_eq "$partial_home/.local/share/pnpm/bin/pnpm" "$(readlink "$partial_home/.local/bin/pnpm")" 'partial pnpm recovery links the existing standalone binary'
+partial_actions=$(cat "$log")
+case $partial_actions in
+  *'curl https://get.pnpm.io/install.sh'*) fail 'partial pnpm recovery downloaded the installer again' ;;
+esac
 
 conflict_home="$tmp_dir/conflict-home"
 mkdir -p "$conflict_home/.local/bin"
