@@ -78,7 +78,6 @@ assert_eq '' "$(read_tool_file uv manifests/uv-tools.txt)" "uv manifest starts e
 expected_work_tools=$(cat <<'EOF'
 bun
 bunx
-claude
 code
 difft
 dust

@@ -75,7 +75,6 @@ preflight_target() {
 # prompt, directory creation, or package-manager mutation.
 for command_target in \
   "herdr:$bin_dir/herdr" \
-  "claude:$bin_dir/claude" \
   "uv:$bin_dir/uv" \
   "uvx:$bin_dir/uvx" \
   "bun:$bin_dir/bun" \
@@ -137,13 +136,6 @@ install_herdr() {
   installer=$(download_installer herdr https://herdr.dev/install.sh)
   HERDR_INSTALL_DIR=$bin_dir sh "$installer" || install_error herdr
   [ -x "$bin_dir/herdr" ] || install_error 'herdr verification'
-}
-
-install_claude() {
-  tool_ready claude "$bin_dir/claude" && return
-  installer=$(download_installer claude https://claude.ai/install.sh)
-  HOME=$HOME bash "$installer" stable || install_error claude
-  [ -x "$bin_dir/claude" ] || install_error 'claude verification'
 }
 
 install_uv() {
@@ -264,7 +256,6 @@ install_snap_app() {
 }
 
 install_herdr
-install_claude
 install_uv
 install_bun
 install_pnpm

@@ -1,7 +1,6 @@
 # Commands installed by bin/install-work-tools from official vendor sources.
 bun
 bunx
-claude
 code
 difft
 dust

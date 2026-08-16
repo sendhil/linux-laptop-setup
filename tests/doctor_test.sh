@@ -75,7 +75,7 @@ VERSION_ID="24.04"
 VERSION_CODENAME=noble
 EOF
 
-owned_commands='bash batcat blueman-applet brightnessctl bun bunx claude code curl difft direnv dust eza fc-match fzf gh git git-lfs grim herdr http jq kitty lazygit lnav mako make nm-applet notify-send nvim obsidian opencode pi pipx pipewire playerctl pnpm python3 rg shellcheck slurp stow sway swayidle swaylock tmux tree unzip uv uvx waybar wezterm wireplumber wl-copy wl-paste wofi Xwayland ya yazi zoxide zsh'
+owned_commands='bash batcat blueman-applet brightnessctl bun bunx code curl difft direnv dust eza fc-match fzf gh git git-lfs grim herdr http jq kitty lazygit lnav mako make nm-applet notify-send nvim obsidian opencode pi pipx pipewire playerctl pnpm python3 rg shellcheck slurp stow sway swayidle swaylock tmux tree unzip uv uvx waybar wezterm wireplumber wl-copy wl-paste wofi Xwayland ya yazi zoxide zsh'
 external_commands='docker kubectl zoom'
 
 make_success_command() {

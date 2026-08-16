@@ -74,9 +74,6 @@ case $url in
   https://herdr.dev/install.sh)
     body='mkdir -p "$HERDR_INSTALL_DIR"; printf "#!/bin/sh\\nexit 0\\n" >"$HERDR_INSTALL_DIR/herdr"; chmod +x "$HERDR_INSTALL_DIR/herdr"'
     ;;
-  https://claude.ai/install.sh)
-    body='mkdir -p "$HOME/.local/bin"; printf "#!/bin/sh\\nexit 0\\n" >"$HOME/.local/bin/claude"; chmod +x "$HOME/.local/bin/claude"'
-    ;;
   https://astral.sh/uv/install.sh)
     body='mkdir -p "$XDG_BIN_HOME"; for c in uv uvx; do printf "#!/bin/sh\\nexit 0\\n" >"$XDG_BIN_HOME/$c"; chmod +x "$XDG_BIN_HOME/$c"; done'
     ;;
@@ -119,7 +116,7 @@ assert_contains "$invalid_output" 'usage:' 'invalid work-tools input prints usag
 [ ! -s "$log" ] || fail 'invalid work-tools input caused a mutation'
 
 run_installer >/dev/null
-for command_name in herdr claude uv uvx bun bunx pnpm opencode pi; do
+for command_name in herdr uv uvx bun bunx pnpm opencode pi; do
   [ -x "$fake_home/.local/bin/$command_name" ] || fail "$command_name was not installed into the user command directory"
 done
 actions=$(cat "$log")
@@ -128,7 +125,6 @@ assert_contains "$actions" 'sudo snap install code --classic' 'VS Code uses the 
 assert_contains "$actions" 'sudo snap install obsidian --classic' 'Obsidian uses the official snap'
 for url in \
   https://herdr.dev/install.sh \
-  https://claude.ai/install.sh \
   https://astral.sh/uv/install.sh \
   https://bun.sh/install \
   https://get.pnpm.io/install.sh \
@@ -138,6 +134,7 @@ for url in \
 done
 case $actions in
   *chatgpt.com/codex/install.sh*) fail 'work-tools installer still downloads Codex' ;;
+  *claude.ai/install.sh*) fail 'work-tools installer still downloads Claude Code' ;;
 esac
 case $actions in
   *' npm '*|*' node '*) fail 'work-tools installer directly manages Node or npm' ;;

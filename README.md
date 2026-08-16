@@ -71,7 +71,7 @@ instead of silently replacing administrator-managed configuration.
 
 `bin/install-work-tools` installs the reviewed user-facing work tools that are
 not supplied by Ubuntu. It uses the vendors' official installers for Herdr,
-Claude Code, uv/uvx, Bun/bunx, standalone pnpm, OpenCode, and Pi;
+uv/uvx, Bun/bunx, standalone pnpm, OpenCode, and Pi;
 official GitHub releases for lazygit, difftastic (`difft`), eza, yazi/ya, and
 dust; and the official Snap packages for VS Code and Obsidian. Downloads and
 user-owned command destinations are preflighted before mutation, completed
