@@ -25,6 +25,10 @@ external_assumptions=$(load_external_assumptions "$profile") || exit 2
 
 policy_agent=${SETUP_POLICY_AGENT:-/usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1}
 proc_root=${SETUP_PROC_ROOT:-/proc}
+system_env=${SETUP_SYSTEM_ENV:-/usr/bin/env}
+system_timeout=${SETUP_SYSTEM_TIMEOUT:-/usr/bin/timeout}
+system_bash=${SETUP_SYSTEM_BASH:-/bin/bash}
+system_zsh=${SETUP_SYSTEM_ZSH:-/usr/bin/zsh}
 if [[ $policy_agent != /* ]]; then
   printf 'error: invalid policy agent path: %s\n' "$policy_agent" >&2
   exit 2
@@ -41,6 +45,12 @@ if [[ $proc_root =~ [[:cntrl:]] ]]; then
   printf 'error: invalid proc root\n' >&2
   exit 2
 fi
+for system_binary in "$system_env" "$system_timeout" "$system_bash" "$system_zsh"; do
+  if [[ $system_binary != /* ]] || [[ $system_binary =~ [[:cntrl:]] ]]; then
+    printf 'error: invalid system binary path\n' >&2
+    exit 2
+  fi
+done
 
 os_release=${SETUP_OS_RELEASE:-/etc/os-release}
 load_ubuntu_info "$os_release" || exit 2
@@ -139,6 +149,27 @@ report_shell_diagnostic() {
   esac
 }
 
+report_clean_shell_diagnostic() {
+  diagnostic_label=$1
+  shift
+  capture_bounded_command "$system_env" -i "HOME=$HOME" PATH=/usr/bin:/bin TERM=dumb \
+    "$system_timeout" -k 1 3 "$@"
+  diagnostic_status=$bounded_status
+  case $diagnostic_status in
+    0)
+      printf '  shell startup diagnostic: %s (passed)\n' "$diagnostic_label"
+      ;;
+    124|137)
+      printf '  shell startup diagnostic: %s (timed out after 3s; status %s)\n' \
+        "$diagnostic_label" "$diagnostic_status"
+      ;;
+    *)
+      printf '  shell startup diagnostic: %s (status %s)\n' \
+        "$diagnostic_label" "$diagnostic_status"
+      ;;
+  esac
+}
+
 run_shell_diagnostics() {
   shell_name=$1
   case $shell_name in
@@ -154,6 +185,38 @@ run_shell_diagnostics() {
   esac
 }
 
+run_clean_shell_diagnostic() {
+  shell_name=$1
+  case $shell_name in
+    bash)
+      report_clean_shell_diagnostic 'bash clean system environment' \
+        "$system_bash" --noprofile --norc -ic exit
+      ;;
+    zsh)
+      report_clean_shell_diagnostic 'zsh clean system environment' \
+        "$system_zsh" -df -ic exit
+      ;;
+  esac
+}
+
+report_resolved_shell_executable() {
+  shell_name=$1
+  shell_path=$(command -v "$shell_name" 2>/dev/null || :)
+  case $shell_path in
+    /*) ;;
+    *)
+      printf '  shell startup executable: unresolved\n'
+      return
+      ;;
+  esac
+  canonical_shell_path=$(readlink -f "$shell_path" 2>/dev/null || :)
+  if [[ $canonical_shell_path != /* ]] || [[ $canonical_shell_path =~ [[:cntrl:]] ]]; then
+    printf '  shell startup executable: unresolved\n'
+    return
+  fi
+  printf '  shell startup executable: %s\n' "$canonical_shell_path"
+}
+
 check_shell_startup() {
   shell_name=$1
   capture_bounded_command timeout -k 2 10 "$shell_name" -lic exit
@@ -165,7 +228,9 @@ check_shell_startup() {
       ;;
     124|137)
       fail_check "shell startup: $shell_name (timed out after 10s)"
+      report_resolved_shell_executable "$shell_name"
       run_shell_diagnostics "$shell_name"
+      run_clean_shell_diagnostic "$shell_name"
       ;;
     *)
       fail_check "shell startup: $shell_name (status $shell_status)"

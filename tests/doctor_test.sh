@@ -19,6 +19,7 @@ empty_proc_root="$tmp_dir/empty-proc"
 runtime_tmp="$tmp_dir/runtime-tmp"
 mkdir -p "$test_repo" "$fake_bin" "$host_bin" "$safe_bin" \
   "$proc_root/123" "$empty_proc_root" "$runtime_tmp"
+canonical_fake_bin=$(CDPATH= cd -- "$fake_bin" && pwd -P)
 cp -R "$repo_dir"/. "$test_repo"/
 printf 'runtime sentinel\n' >"$runtime_tmp/sentinel"
 
@@ -90,6 +91,9 @@ case ${0##*/} in
     printf '%s\n' "${FAKE_FONT_FAMILY:-JetBrainsMono Nerd Font Mono}"
     exit 0
     ;;
+  bash)
+    exit "${FAKE_BASH_STATUS:-0}"
+    ;;
   zsh)
     if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
       trap '' TERM
@@ -126,15 +130,18 @@ EOF
 
 cat >"$fake_bin/timeout" <<'EOF'
 #!/bin/bash
-printf 'timeout' >>"$FAKE_CALL_LOG"
-printf ' <%s>' "$@" >>"$FAKE_CALL_LOG"
-printf '\n' >>"$FAKE_CALL_LOG"
+if [ -n "${FAKE_CALL_LOG:-}" ]; then
+  printf 'timeout' >>"$FAKE_CALL_LOG"
+  printf ' <%s>' "$@" >>"$FAKE_CALL_LOG"
+  printf '\n' >>"$FAKE_CALL_LOG"
+fi
 [ "${1:-}" = -k ] || exit 64
 kill_grace=${2:-}
 shift 2
 duration=${1:-}
 shift
-case $kill_grace:$duration:${1:-} in
+command_basename=${1##*/}
+case $kill_grace:$duration:$command_basename in
   1:3:bash) : ;;
   1:3:zsh)
     if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
@@ -162,6 +169,14 @@ case $kill_grace:$duration:${1:-} in
   *) exit 64 ;;
 esac
 "$@"
+EOF
+
+cat >"$fake_bin/env" <<'EOF'
+#!/bin/bash
+printf 'env' >>"$FAKE_CALL_LOG"
+printf ' <%s>' "$@" >>"$FAKE_CALL_LOG"
+printf '\n' >>"$FAKE_CALL_LOG"
+exec /usr/bin/env "$@"
 EOF
 
 cat >"$fake_bin/systemctl" <<'EOF'
@@ -227,11 +242,16 @@ run_doctor() {
     SETUP_OS_RELEASE="${SETUP_OS_RELEASE:-$tmp_dir/os-release}" \
     SETUP_POLICY_AGENT="${SETUP_POLICY_AGENT:-$policy_agent}" \
     SETUP_PROC_ROOT="${SETUP_PROC_ROOT:-$proc_root}" \
+    SETUP_SYSTEM_BASH="${SETUP_SYSTEM_BASH:-$fake_bin/bash}" \
+    SETUP_SYSTEM_ENV="${SETUP_SYSTEM_ENV:-$fake_bin/env}" \
+    SETUP_SYSTEM_TIMEOUT="${SETUP_SYSTEM_TIMEOUT:-$fake_bin/timeout}" \
+    SETUP_SYSTEM_ZSH="${SETUP_SYSTEM_ZSH:-$fake_bin/zsh}" \
     TMPDIR="$runtime_tmp" \
     SWAYSOCK="${SWAYSOCK:-}" \
     XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-}" \
     FAKE_CALL_LOG="$call_log" \
     FAKE_FONT_FAMILY="${FAKE_FONT_FAMILY:-JetBrainsMono Nerd Font Mono}" \
+    FAKE_BASH_STATUS="${FAKE_BASH_STATUS:-0}" \
     FAKE_INACTIVE_SERVICE="${FAKE_INACTIVE_SERVICE:-}" \
     FAKE_LSMOD_OUTPUT="${FAKE_LSMOD_OUTPUT:-}" \
     FAKE_NVIDIA_HARD_TIMEOUT="${FAKE_NVIDIA_HARD_TIMEOUT:-0}" \
@@ -295,6 +315,10 @@ assert_contains "$doctor_output" 'WARN external command: slack' 'missing Slack i
 assert_contains "$doctor_output" 'SKIP Sway session checks: not running under Sway' 'non-Sway sessions skip service checks'
 assert_contains "$doctor_output" 'PASS shell startup: bash' 'Bash startup is checked'
 assert_contains "$doctor_output" 'PASS shell startup: zsh' 'Zsh startup is checked'
+case $doctor_output in
+  *'shell startup executable:'*|*'clean system environment'*)
+    fail 'healthy shell startups do not run timeout diagnostics' ;;
+esac
 assert_contains "$doctor_output" 'Summary: PASS ' 'doctor prints result accounting'
 assert_contains "$doctor_output" ' WARN 1 SKIP 1 FAIL 0' 'warnings and skips do not count as failures'
 
@@ -330,6 +354,24 @@ FAKE_ZSH_STATUS=7 FAKE_ZSH_OUTPUT=$'startup problem\nsecond line\n' run_doctor
 assert_eq 1 "$doctor_status" 'a failed bounded shell startup is owned drift'
 assert_contains "$doctor_output" 'FAIL shell startup: zsh (status 7)' 'failed Zsh startup includes its status'
 assert_contains "$doctor_output" $'  startup problem\n  second line' 'shell startup diagnostics are indented'
+case $doctor_output in
+  *'shell startup executable:'*|*'clean system environment'*)
+    fail 'non-timeout shell failures do not run timeout diagnostics' ;;
+esac
+
+FAKE_BASH_STATUS=124 run_doctor
+assert_eq 1 "$doctor_status" 'a timed-out Bash startup is owned drift'
+assert_contains "$doctor_output" 'FAIL shell startup: bash (timed out after 10s)' \
+  'Bash timeout is distinguished from other failures'
+assert_contains "$doctor_output" \
+  "shell startup executable: $canonical_fake_bin/bash" \
+  'a timed-out Bash startup reports its canonical executable path'
+assert_contains "$doctor_output" \
+  'shell startup diagnostic: bash clean system environment (passed)' \
+  'a timed-out Bash startup reports its clean system-environment probe'
+assert_contains "$(cat "$call_log")" \
+  "env <-i> <HOME=$HOME> <PATH=/usr/bin:/bin> <TERM=dumb> <$fake_bin/timeout> <-k> <1> <3> <$fake_bin/bash> <--noprofile> <--norc> <-ic> <exit>" \
+  'the clean Bash probe uses an empty environment and absolute system tools'
 
 diagnostic_lines='line 1 unsafe\033[31m-red\033[0m\n'
 line_number=2
@@ -354,12 +396,24 @@ assert_contains "$doctor_output" \
 assert_contains "$doctor_output" \
   'shell startup diagnostic: zsh user startup (timed out after 3s; status 124)' \
   'a timed-out Zsh startup reports its user startup diagnostic status'
+assert_contains "$doctor_output" \
+  "shell startup executable: $canonical_fake_bin/zsh" \
+  'a timed-out Zsh startup reports its canonical executable path'
+assert_contains "$doctor_output" \
+  'shell startup diagnostic: zsh clean system environment (passed)' \
+  'a timed-out Zsh startup reports its clean system-environment probe'
 assert_contains "$(cat "$call_log")" \
   'timeout <-k> <1> <3> <zsh> <-df> <-ic> <exit>' \
   'Zsh clean baseline uses a three-second bounded diagnostic probe'
 assert_contains "$(cat "$call_log")" \
   'timeout <-k> <1> <3> <zsh> <-dlic> <exit>' \
   'Zsh user startup uses a three-second bounded diagnostic probe'
+assert_contains "$(cat "$call_log")" \
+  "readlink <-f> <$fake_bin/zsh>" \
+  'a timed-out Zsh startup canonicalizes its resolved executable path'
+assert_contains "$(cat "$call_log")" \
+  "env <-i> <HOME=$HOME> <PATH=/usr/bin:/bin> <TERM=dumb> <$fake_bin/timeout> <-k> <1> <3> <$fake_bin/zsh> <-df> <-ic> <exit>" \
+  'the clean Zsh probe uses an empty environment and absolute system tools'
 case $(cat "$call_log") in
   *'timeout <-k> <1> <3> <bash>'*) fail 'a healthy Bash primary probe does not run Bash diagnostics' ;;
 esac
