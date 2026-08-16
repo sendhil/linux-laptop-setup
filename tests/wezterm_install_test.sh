@@ -51,6 +51,16 @@ for recovery_text in \
     "installer lacks zero-byte APT source recovery contract: $recovery_text"
 done
 
+for recovery_text in \
+  'key_replace=0' \
+  '[ -f "$keyring" ] ||' \
+  'if [ ! -s "$keyring" ]; then' \
+  'key_replace=1' \
+  'if [ "$key_replace" -eq 1 ]; then'; do
+  assert_contains "$script_text" "$recovery_text" \
+    "installer lacks zero-byte keyring recovery contract: $recovery_text"
+done
+
 case $script_text in
   *apt-key*) fail 'installer uses retired apt-key' ;;
 esac

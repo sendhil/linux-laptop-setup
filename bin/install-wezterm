@@ -93,14 +93,26 @@ read_key_fingerprint() {
 }
 
 key_ready=0
+key_replace=0
 [ ! -L "$keyring" ] || \
   configuration_error "refusing to overwrite differing keyring: $keyring"
 if [ -e "$keyring" ]; then
-  installed_fingerprint=$(read_key_fingerprint "$keyring") || \
-    configuration_error "cannot inspect existing keyring: $keyring"
-  [ "$installed_fingerprint" = "$key_fingerprint" ] || \
+  [ -f "$keyring" ] || \
     configuration_error "refusing to overwrite differing keyring: $keyring"
-  key_ready=1
+  if [ ! -s "$keyring" ]; then
+    # A prior interrupted dearmor/install can leave the regular keyring file
+    # empty. It contains no key material, so it is safe to reconstruct from
+    # the downloaded key after verifying the pinned fingerprint below.
+    key_replace=1
+  else
+    installed_fingerprint=$(read_key_fingerprint "$keyring") || \
+      configuration_error "cannot inspect existing keyring: $keyring"
+    [ "$installed_fingerprint" = "$key_fingerprint" ] || \
+      configuration_error "refusing to overwrite differing keyring: $keyring"
+    key_ready=1
+  fi
+else
+  key_replace=1
 fi
 
 font_target_has_family() {
@@ -240,7 +252,7 @@ if [ "$system_change" -eq 1 ]; then
     configuration_error 'sudo authorization is required to install the WezTerm repository and package'
   fi
 
-  if [ "$key_ready" -eq 0 ]; then
+  if [ "$key_replace" -eq 1 ]; then
     sudo install -o root -g root -m 0644 -- "$key_binary" "$keyring" || \
       install_error "keyring: $keyring"
   fi
