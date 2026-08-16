@@ -130,12 +130,18 @@ printf 'timeout' >>"$FAKE_CALL_LOG"
 printf ' <%s>' "$@" >>"$FAKE_CALL_LOG"
 printf '\n' >>"$FAKE_CALL_LOG"
 [ "${1:-}" = -k ] || exit 64
-[ "${2:-}" = 2 ] || exit 64
+kill_grace=${2:-}
 shift 2
 duration=${1:-}
 shift
-case $duration:${1:-} in
-  10:zsh)
+case $kill_grace:$duration:${1:-} in
+  1:3:bash) : ;;
+  1:3:zsh)
+    if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
+      exit 137
+    fi
+    ;;
+  2:10:zsh)
     if [ "${FAKE_ZSH_IGNORE_TERM:-0}" -eq 1 ]; then
       "$@" &
       child=$!
@@ -148,8 +154,8 @@ case $duration:${1:-} in
       exit 137
     fi
     ;;
-  10:*) : ;;
-  5:nvidia-smi)
+  2:10:*) : ;;
+  2:5:nvidia-smi)
     [ "${FAKE_NVIDIA_TIMEOUT:-0}" -eq 0 ] || exit 124
     [ "${FAKE_NVIDIA_HARD_TIMEOUT:-0}" -eq 0 ] || exit 137
     ;;
@@ -342,6 +348,21 @@ esac
 FAKE_ZSH_STATUS=124 FAKE_ZSH_OUTPUT='partial output\n' run_doctor
 assert_eq 1 "$doctor_status" 'a timed-out shell startup is owned drift'
 assert_contains "$doctor_output" 'FAIL shell startup: zsh (timed out after 10s)' 'shell timeout is distinguished from other failures'
+assert_contains "$doctor_output" \
+  'shell startup diagnostic: zsh clean baseline (timed out after 3s; status 124)' \
+  'a timed-out Zsh startup reports its clean baseline diagnostic status'
+assert_contains "$doctor_output" \
+  'shell startup diagnostic: zsh user startup (timed out after 3s; status 124)' \
+  'a timed-out Zsh startup reports its user startup diagnostic status'
+assert_contains "$(cat "$call_log")" \
+  'timeout <-k> <1> <3> <zsh> <-df> <-ic> <exit>' \
+  'Zsh clean baseline uses a three-second bounded diagnostic probe'
+assert_contains "$(cat "$call_log")" \
+  'timeout <-k> <1> <3> <zsh> <-dlic> <exit>' \
+  'Zsh user startup uses a three-second bounded diagnostic probe'
+case $(cat "$call_log") in
+  *'timeout <-k> <1> <3> <bash>'*) fail 'a healthy Bash primary probe does not run Bash diagnostics' ;;
+esac
 case $doctor_output in
   *'partial output'*) fail 'timeout output does not obscure the bounded-time diagnosis' ;;
 esac
