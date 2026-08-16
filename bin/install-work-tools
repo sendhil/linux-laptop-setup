@@ -169,8 +169,10 @@ install_pnpm() {
   pnpm_root=$data_home/pnpm
   stage_home=$tmp_dir/pnpm-home
   mkdir -p -- "$stage_home" || install_error 'pnpm staging directory'
+  pnpm_shell_config=$stage_home/.shrc
+  : >"$pnpm_shell_config" || install_error 'pnpm staged shell configuration'
   installer=$(download_installer pnpm https://get.pnpm.io/install.sh)
-  HOME=$stage_home PNPM_HOME=$pnpm_root SHELL=/bin/sh sh "$installer" || install_error pnpm
+  HOME=$stage_home PNPM_HOME=$pnpm_root SHELL=/bin/sh ENV=$pnpm_shell_config sh "$installer" || install_error pnpm
   link_command "$pnpm_root/pnpm" "$bin_dir/pnpm"
 }
 

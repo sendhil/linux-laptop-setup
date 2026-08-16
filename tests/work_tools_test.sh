@@ -81,7 +81,7 @@ case $url in
     body='mkdir -p "$BUN_INSTALL/bin"; for c in bun bunx; do printf "#!/bin/sh\\nexit 0\\n" >"$BUN_INSTALL/bin/$c"; chmod +x "$BUN_INSTALL/bin/$c"; done'
     ;;
   https://get.pnpm.io/install.sh)
-    body='mkdir -p "$PNPM_HOME"; printf "#!/bin/sh\\nexit 0\\n" >"$PNPM_HOME/pnpm"; chmod +x "$PNPM_HOME/pnpm"'
+    body='[ "${SHELL:-}" = /bin/sh ] || exit 41; [ "${ENV:-}" = "$HOME/.shrc" ] || exit 42; [ -f "$ENV" ] || exit 43; printf "export PNPM_HOME=%s\\n" "$PNPM_HOME" >>"$ENV"; mkdir -p "$PNPM_HOME"; printf "#!/bin/sh\\nexit 0\\n" >"$PNPM_HOME/pnpm"; chmod +x "$PNPM_HOME/pnpm"'
     ;;
   https://opencode.ai/install)
     body='mkdir -p "$HOME/.opencode/bin"; printf "#!/bin/sh\\nexit 0\\n" >"$HOME/.opencode/bin/opencode"; chmod +x "$HOME/.opencode/bin/opencode"'
@@ -116,6 +116,7 @@ assert_contains "$invalid_output" 'usage:' 'invalid work-tools input prints usag
 [ ! -s "$log" ] || fail 'invalid work-tools input caused a mutation'
 
 run_installer >/dev/null
+[ ! -e "$fake_home/.shrc" ] || fail 'pnpm installer modified the real shell configuration'
 for command_name in herdr uv uvx bun bunx pnpm opencode pi; do
   [ -x "$fake_home/.local/bin/$command_name" ] || fail "$command_name was not installed into the user command directory"
 done
