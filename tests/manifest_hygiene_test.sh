@@ -83,7 +83,6 @@ difft
 dust
 eza
 herdr
-lazygit
 obsidian
 opencode
 pi
@@ -95,6 +94,11 @@ yazi
 EOF
 )
 assert_eq "$expected_work_tools" "$(read_tool_file command manifests/work-tools.txt)" "official work-tool manifest is reviewed"
+
+if grep -Rin 'lazygit' README.md bin manifests profiles docs >/dev/null 2>&1; then
+  fail 'lazygit remains in the supported setup'
+fi
+
 assert_eq "$(printf 'command\tdocker\ncommand\tkubectl\ncommand\tslack\ncommand\tzoom')" "$(load_external_assumptions work)" "work externals remain diagnostic-only"
 
 for apt_manifest in manifests/apt-*.txt profiles/*.apt.txt; do

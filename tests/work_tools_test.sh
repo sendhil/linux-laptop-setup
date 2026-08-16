@@ -94,7 +94,7 @@ esac
 printf '#!/bin/sh\nset -eu\n%s\n' "$body" >"$output"
 EOF
 
-for command_name in lazygit difft eza yazi ya dust; do
+for command_name in difft eza yazi ya dust; do
   printf '#!/bin/sh\nexit 0\n' >"$fake_bin/$command_name"
 done
 chmod +x "$fake_bin"/*

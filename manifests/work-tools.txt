@@ -6,7 +6,6 @@ difft
 dust
 eza
 herdr
-lazygit
 obsidian
 opencode
 pi
