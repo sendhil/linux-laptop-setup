@@ -1,0 +1,174 @@
+#!/bin/bash
+
+set -u
+
+usage() {
+  printf 'usage: %s PROFILE DOTFILES_CHECKOUT\n' "$0" >&2
+}
+
+if [ "$#" -ne 2 ]; then
+  usage
+  exit 2
+fi
+profile=$1
+dotfiles_dir=$2
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
+cd "$repo_dir" || exit 2
+
+. "$repo_dir/lib/common.sh"
+. "$repo_dir/lib/platform.sh"
+
+configuration_error() {
+  printf 'error: %s\n' "$1" >&2
+  exit 2
+}
+
+print_rerun() {
+  printf 'rerun:' >&2
+  printf ' %q' bash "$repo_dir/bin/setup-work-laptop" "$profile" "$dotfiles_dir" >&2
+  printf '\n' >&2
+}
+
+run_stage() {
+  stage=$1
+  shift
+  "$@"
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    printf 'error: work-laptop setup stage failed: %s\n' "$stage" >&2
+    print_rerun
+    case $status in
+      2) exit 2 ;;
+      *) exit 1 ;;
+    esac
+  fi
+}
+
+case $dotfiles_dir in
+  /*) : ;;
+  *) configuration_error 'DOTFILES_CHECKOUT must be an absolute path' ;;
+esac
+case $dotfiles_dir in
+  *$'\n'*|*$'\r'*) configuration_error 'DOTFILES_CHECKOUT contains control characters' ;;
+esac
+
+validate_profile "$profile" || exit 2
+[ -f "$dotfiles_dir/Makefile" ] || \
+  configuration_error "dotfiles Makefile is unavailable: $dotfiles_dir/Makefile"
+[ -x "$dotfiles_dir/scripts/setup-local-laptop.sh" ] || \
+  configuration_error "dotfiles laptop-profile script is unavailable: $dotfiles_dir/scripts/setup-local-laptop.sh"
+
+os_release=${SETUP_OS_RELEASE:-/etc/os-release}
+load_ubuntu_info "$os_release" || exit 2
+case $UBUNTU_VERSION_ID in
+  22.04|24.04) : ;;
+  *) configuration_error "unsupported Ubuntu release for the managed work image: $UBUNTU_VERSION_ID" ;;
+esac
+architecture=$(detect_arch) || exit 2
+[ "$architecture" = amd64 ] || \
+  configuration_error "unsupported architecture for the managed work image: $architecture"
+
+[ "$(id -u)" -ne 0 ] || \
+  configuration_error 'run this coordinator as your normal user, not as root'
+case ${HOME:-} in
+  /*) : ;;
+  *) configuration_error 'HOME must be an absolute path' ;;
+esac
+
+for command_name in bash dpkg grep id make sed sudo tr; do
+  command -v "$command_name" >/dev/null 2>&1 || \
+    configuration_error "unavailable command: $command_name"
+done
+
+if ! sudo -v; then
+  configuration_error 'sudo authorization is required for the work-laptop setup'
+fi
+
+dpkg_audit=$(sudo dpkg --audit 2>&1)
+dpkg_status=$?
+if [ "$dpkg_status" -ne 0 ]; then
+  printf '%s\n' "$dpkg_audit" >&2
+  configuration_error 'unable to audit dpkg state; ask workplace IT before continuing'
+fi
+if [ -n "$dpkg_audit" ]; then
+  printf '%s\n' "$dpkg_audit" >&2
+  configuration_error 'dpkg/APT state is inconsistent; run: sudo bin/audit-wine'
+fi
+
+run_stage bootstrap "$repo_dir/bin/bootstrap"
+run_stage install-wezterm "$repo_dir/bin/install-wezterm"
+run_stage apply "$repo_dir/bin/apply" "$profile"
+run_stage dotfiles-preflight make -C "$dotfiles_dir" preflight-ubuntu
+run_stage dotfiles-link make -C "$dotfiles_dir" stow-ubuntu
+
+config_home=${XDG_CONFIG_HOME:-$HOME/.config}
+case $config_home in
+  /*) : ;;
+  *) config_home=$HOME/.config ;;
+esac
+sway_config=$config_home/sway/config
+[ -r "$sway_config" ] || configuration_error "cannot read linked Sway config: $sway_config"
+
+proc_modules=${SETUP_PROC_MODULES:-/proc/modules}
+case $proc_modules in
+  /*) : ;;
+  *) configuration_error 'loaded-module inventory path must be absolute' ;;
+esac
+[ -r "$proc_modules" ] || \
+  configuration_error "cannot inspect loaded kernel modules: $proc_modules"
+
+if grep -Eq '^nvidia(_[^[:space:]]*)?[[:space:]]' "$proc_modules"; then
+  nvidia_session=1
+  run_stage sway-nvidia-session "$repo_dir/bin/install-sway-nvidia-session"
+else
+  nvidia_session=0
+  command -v sway >/dev/null 2>&1 || configuration_error 'Sway is unavailable after package apply'
+  run_stage sway-config sway --validate -c "$sway_config"
+fi
+
+is_sway_session() {
+  [ -n "${SWAYSOCK:-}" ] && return 0
+  desktop_value=${XDG_CURRENT_DESKTOP:-}
+  while :; do
+    desktop_part=${desktop_value%%:*}
+    normalized_part=$(printf '%s' "$desktop_part" |
+      sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' |
+      LC_ALL=C tr '[:upper:]' '[:lower:]')
+    [ "$normalized_part" = sway ] && return 0
+    case $desktop_value in
+      *:*) desktop_value=${desktop_value#*:} ;;
+      *) break ;;
+    esac
+  done
+  return 1
+}
+
+local_profile_ready() {
+  marker='# Managed by dotfiles scripts/setup-local-laptop.sh.'
+  sway_local=$HOME/.config/sway/local.d/laptop.conf
+  wezterm_local=$HOME/.config/wezterm/local.lua
+  for local_file in "$sway_local" "$wezterm_local"; do
+    [ -f "$local_file" ] && [ ! -L "$local_file" ] || return 1
+    [ "$(sed -n '1p' "$local_file" 2>/dev/null)" = "$marker" ] || return 1
+  done
+}
+
+if is_sway_session; then
+  if ! local_profile_ready; then
+    run_stage local-laptop-profile \
+      "$dotfiles_dir/scripts/setup-local-laptop.sh" --font-size 17
+  fi
+  run_stage doctor "$repo_dir/bin/doctor" "$profile"
+  printf 'Work-laptop setup complete.\n'
+  printf 'Complete the physical checklist: %s\n' "$repo_dir/docs/first-sway-login.md"
+else
+  run_stage doctor "$repo_dir/bin/doctor" "$profile"
+  if [ "$nvidia_session" -eq 1 ]; then
+    printf 'Log out, select Sway (NVIDIA test) in GDM, then rerun this command inside Sway.\n'
+  else
+    printf 'Log out, select Sway in GDM, then rerun this command inside Sway.\n'
+  fi
+  print_rerun
+fi

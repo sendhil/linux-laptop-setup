@@ -13,7 +13,28 @@ the supported Ubuntu setup.
 
 ## Clean Ubuntu workflow
 
-Clone this repository on the laptop and run these commands from its root:
+Clone this repository and the cross-platform dotfiles repository at the
+conventional paths on the laptop. From this repository, run the resumable
+coordinator:
+
+```bash
+bin/setup-work-laptop work "$HOME/src/dotfiles-mac"
+```
+
+Run the first pass from GNOME. It verifies Ubuntu 22.04 or 24.04 on amd64,
+checks that `dpkg` is healthy before any delegated mutation, runs the reviewed
+software stages, preflights and links the dotfiles, validates the standard
+Sway session or installs the separate NVIDIA test session, and runs doctor.
+Log out through GDM and select the session it reports.
+Then rerun the same command inside Sway.
+The second pass creates the laptop-local built-in-keyboard swap
+and WezTerm font-size-17 override when they are not already managed, reruns
+doctor in Sway, and points to the physical checklist. Safe completed stages
+are rediscovered, so the exact command is also the supported recovery path.
+
+The coordinator never clones a repository or guesses its location. Pass the
+existing absolute dotfiles checkout. For troubleshooting, its underlying
+stages are still available individually:
 
 ```bash
 bin/bootstrap
@@ -23,6 +44,13 @@ bin/apply work
 bin/audit work
 bin/doctor work
 ```
+
+`bin/setup-work-laptop` performs the two-pass orchestration described above.
+It refuses root execution, preflights interactive `sudo`, and stops before
+mutation if `sudo dpkg --audit` fails or reports unfinished packages. In that
+case, ask workplace IT to repair the package database; for the known Wine
+diagnostic, run `sudo bin/audit-wine` exactly as reported by the coordinator.
+The coordinator does not perform a package repair.
 
 `bin/bootstrap` detects Ubuntu, architecture, and visible graphics hardware,
 then installs only Git and CA certificates when they are missing. It may ask
@@ -35,7 +63,10 @@ repository, installs the `wezterm` package through APT, and installs the pinned
 directory. It stages and verifies the signing-key fingerprint, font checksum,
 and archive contents before mutation; it never executes downloaded shell code.
 The command is conflict-safe, idempotent, and must be run before the first
-audit because `wezterm` is a declared common package.
+audit because `wezterm` is a declared common package. It may recover a
+pre-existing zero-byte regular `wezterm.list` left by an interrupted setup,
+but it refuses symlinks, non-regular paths, and any nonempty differing source
+instead of silently replacing administrator-managed configuration.
 
 The first `bin/audit work` is read-only. On a clean laptop it normally reports
 drift and exits `1`. Review that report and the manifests before running
@@ -53,6 +84,7 @@ workflows should use the `bin/` commands directly.
 
 | Command | `0` | `1` | `2` |
 | --- | --- | --- | --- |
+| `bin/setup-work-laptop work DOTFILES_CHECKOUT` | current pass is complete | delegated installation, link, validation, or operational check failed | usage, platform, privilege, package-database, checkout, or local-profile conflict |
 | `bin/bootstrap` | prerequisites are ready | prerequisite installation failed | usage, platform, inventory, or privilege prerequisite error |
 | `bin/install-wezterm` | official repository, package, and font are ready | download, package, font, or verification failed | usage, platform, dependency, conflict, architecture, or privilege error |
 | `bin/audit work` | declared state is converged | missing or incompatible declared software | invalid configuration or unavailable/broken inventory manager |
@@ -109,8 +141,9 @@ mutation. Resolve that case explicitly with IT or update the reviewed manifest.
 ## Dotfiles handoff
 
 Software setup belongs here; user configuration belongs in the cross-platform
-dotfiles repository. After this repository converges, clone the dotfiles
-repository, inspect its read-only Ubuntu preflight, and then link it:
+dotfiles repository. The coordinator runs its read-only Ubuntu preflight and
+then links it. The equivalent manual commands, run from the dotfiles checkout,
+are:
 
 ```bash
 make preflight-ubuntu
@@ -120,7 +153,11 @@ make stow-ubuntu
 Run those commands from the dotfiles checkout. Do not use a cleanup script to
 delete existing home-directory files; resolve every reported Stow conflict
 explicitly. The dotfiles setup provides the Sway configuration and portable
-local/SSH shell behavior.
+local/SSH shell behavior. On the second pass inside Sway it also invokes the
+dotfiles laptop helper when no managed local profile exists. That helper
+targets only the selected built-in keyboard, leaves external keyboards
+unchanged, and writes a local WezTerm font-size-17 override. Those ignored
+machine-local files are never Stowed or shared with another computer.
 
 ## Sway, GDM, and GNOME
 

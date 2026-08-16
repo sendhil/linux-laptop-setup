@@ -39,6 +39,18 @@ for required_text in \
   assert_contains "$script_text" "$required_text" "installer contains required contract: $required_text"
 done
 
+for recovery_text in \
+  'source_ready=0' \
+  'source_replace=0' \
+  '[ -f "$source_list" ] ||' \
+  'elif [ ! -s "$source_list" ]; then' \
+  'source_replace=1' \
+  '[ "$source_ready" -eq 1 ] || system_change=1' \
+  'if [ "$source_replace" -eq 1 ]; then'; do
+  assert_contains "$script_text" "$recovery_text" \
+    "installer lacks zero-byte APT source recovery contract: $recovery_text"
+done
+
 case $script_text in
   *apt-key*) fail 'installer uses retired apt-key' ;;
 esac

@@ -9,12 +9,15 @@ cd "$repo_dir"
 
 readme=$(cat README.md)
 for required_text in \
+  'bin/setup-work-laptop work "$HOME/src/dotfiles-mac"' \
+  'rerun the same command inside Sway' \
   'bin/bootstrap' \
   'bin/install-wezterm' \
   'bin/audit work' \
   'bin/apply work' \
   'bin/doctor work' \
   'GNOME fallback' \
+  'workplace IT' \
   'externally managed' \
   'pre-modernization-2026-08-11'; do
   assert_contains "$readme" "$required_text" "README documents $required_text"
@@ -28,6 +31,8 @@ for required_text in \
   'Slack' \
   'Zoom' \
   'screen sharing' \
+  'journalctl --user' \
+  'WezTerm' \
   'SSH' \
   'GNOME'; do
   assert_contains "$checklist" "$required_text" "first-login checklist covers $required_text"
@@ -101,7 +106,7 @@ assert_contains "$smoke_call" 'GIT_CONFIG_KEY_0=safe.directory' \
   'container smoke declares the Git safe-directory key without writing config'
 assert_contains "$smoke_call" 'GIT_CONFIG_VALUE_0=/repo' \
   'container smoke marks only the mounted repository safe'
-assert_contains "$smoke_call" 'bash -n bin/bootstrap bin/audit bin/apply bin/doctor bin/audit-wine bin/install-sway-nvidia-session bin/install-wezterm' \
+assert_contains "$smoke_call" 'bash -n bin/bootstrap bin/audit bin/apply bin/doctor bin/audit-wine bin/install-sway-nvidia-session bin/install-wezterm bin/setup-work-laptop' \
   'container smoke checks supported command syntax'
 case $smoke_call in
   *'bin/apply work'*) fail 'container smoke applies laptop state' ;;

@@ -66,10 +66,25 @@ font_target=$font_root/JetBrainsMonoNerdFont-3.5.0
 font_marker=$font_target/.setup-source
 expected_marker=$(printf '%s\n%s\n' "$font_url" "$font_sha256")
 
+source_ready=0
+source_replace=0
 [ ! -L "$source_list" ] || \
   configuration_error "refusing to overwrite differing APT source: $source_list"
-if [ -e "$source_list" ] && ! cmp -s -- "$source_asset" "$source_list"; then
-  configuration_error "refusing to overwrite differing APT source: $source_list"
+if [ -e "$source_list" ]; then
+  [ -f "$source_list" ] || \
+    configuration_error "refusing to overwrite differing APT source: $source_list"
+  if cmp -s -- "$source_asset" "$source_list"; then
+    source_ready=1
+  elif [ ! -s "$source_list" ]; then
+    # A prior interrupted install can leave this regular file empty. Replacing
+    # that one unambiguous partial state is safe; all nonempty differences are
+    # still preserved for explicit human review.
+    source_replace=1
+  else
+    configuration_error "refusing to overwrite differing APT source: $source_list"
+  fi
+else
+  source_replace=1
 fi
 
 read_key_fingerprint() {
@@ -135,7 +150,7 @@ case $package_state in
     ;;
 esac
 
-if [ -e "$source_list" ] && [ "$key_ready" -eq 1 ] && \
+if [ "$source_ready" -eq 1 ] && [ "$key_ready" -eq 1 ] && \
   [ "$font_ready" -eq 1 ] && [ "$wezterm_ready" -eq 1 ]; then
   fc-cache -f "$font_root" >/dev/null 2>&1 || install_error 'font cache refresh'
   matched_family=$(fc-match --format '%{family}\n' "$font_family" 2>/dev/null) || \
@@ -217,7 +232,7 @@ fi
 # All platform, dependency, target-conflict, download, fingerprint, checksum,
 # and archive checks complete before privilege authorization or mutation.
 system_change=0
-[ -e "$source_list" ] || system_change=1
+[ "$source_ready" -eq 1 ] || system_change=1
 [ "$key_ready" -eq 1 ] || system_change=1
 [ "$wezterm_ready" -eq 1 ] || system_change=1
 if [ "$system_change" -eq 1 ]; then
@@ -229,7 +244,7 @@ if [ "$system_change" -eq 1 ]; then
     sudo install -o root -g root -m 0644 -- "$key_binary" "$keyring" || \
       install_error "keyring: $keyring"
   fi
-  if [ ! -e "$source_list" ]; then
+  if [ "$source_replace" -eq 1 ]; then
     sudo install -o root -g root -m 0644 -- "$source_asset" "$source_list" || \
       install_error "APT source: $source_list"
   fi

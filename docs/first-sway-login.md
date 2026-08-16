@@ -7,23 +7,30 @@ workflow has been exercised.
 
 Before logging in:
 
-- [ ] Run `bin/install-wezterm` and confirm the exact
-  `JetBrainsMono Nerd Font Mono` family resolves with `fc-match`.
-- [ ] Run `bin/audit work` and confirm the owned manifests are converged.
-- [ ] Run `bin/doctor work` from GNOME or a terminal and review every warning.
+- [ ] From this checkout in GNOME, run
+  `bin/setup-work-laptop work "$HOME/src/dotfiles-mac"`. Confirm the exact
+  `JetBrainsMono Nerd Font Mono` family resolves with `fc-match`, and review
+  every audit and doctor warning.
 - [ ] If a proprietary NVIDIA driver is detected, do not change it; plan a
   short Sway smoke test and be ready to select GNOME again in GDM. On Ubuntu
   22.04, validate the Sway config with `sway --unsupported-gpu --validate -c
   ~/.config/sway/config`, then run `bin/install-sway-nvidia-session` and select
   **Sway (NVIDIA test)** rather than modifying the standard session.
-- [ ] Run `make preflight-ubuntu` and `make stow-ubuntu` from the separate
-  cross-platform dotfiles checkout.
+- [ ] Confirm the coordinator preflights and links the separate cross-platform
+  dotfiles checkout without deleting an existing home-directory file.
 
 Choose Sway from GDM's session menu, then verify:
 
+- [ ] Rerun the same command inside Sway. Confirm its local profile targets
+  only the selected built-in keyboard, leaves external keyboards unchanged,
+  and sets the local WezTerm font size to 17.
 - [ ] Sway reaches a stable desktop and logout returns to GDM.
 - [ ] GNOME can still be selected and reaches a stable desktop.
 - [ ] `Alt+Enter` opens WezTerm and `Alt+Space` opens the application launcher.
+- [ ] The physical Command key uses the shared WezTerm shortcuts: `Super+T`
+  opens a tab, `Super+N` opens a window, `Super+W` closes the current tab with
+  confirmation, `Super+C` copies, `Super+V` pastes, and `Super+F` searches;
+  Ctrl remains terminal input.
 - [ ] Mirrored focus, move, resize, fullscreen, scratchpad, monitor, and
   workspace 1–20 bindings behave as documented by the dotfiles repository.
 - [ ] Built-in and attached displays use the expected resolution, scale,
@@ -38,6 +45,12 @@ Choose Sway from GDM's session menu, then verify:
   or save successfully.
 - [ ] Manual locking works, idle locking triggers, and resume accepts the
   expected credentials without exposing the session.
+- [ ] Suspend and resume once. If WezTerm exits or displays a rendering error,
+  capture the occurrence before restarting it with
+  `journalctl --user -b --since "-10 minutes" -o short-precise | rg -i
+  'wezterm|wayland|gpu|egl|vulkan|drm'` and preserve the complete output for
+  workplace IT or a reproducible follow-up. Do not change the graphics driver
+  from this checklist.
 - [ ] Speakers, headphones, microphone input, mute keys, and volume keys work.
 - [ ] Network status is visible and Wi-Fi can disconnect and reconnect.
 - [ ] Bluetooth can discover and reconnect a trusted peripheral.
