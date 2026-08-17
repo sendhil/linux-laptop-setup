@@ -77,7 +77,7 @@ case ${HOME:-} in
   *) configuration_error 'HOME must be an absolute path' ;;
 esac
 
-for command_name in bash dpkg grep id make sed sudo systemctl tr; do
+for command_name in bash dpkg grep id make sed sudo tr; do
   command -v "$command_name" >/dev/null 2>&1 || \
     configuration_error "unavailable command: $command_name"
 done
@@ -101,14 +101,8 @@ run_stage bootstrap "$repo_dir/bin/bootstrap"
 run_stage install-wezterm "$repo_dir/bin/install-wezterm"
 run_stage apply "$repo_dir/bin/apply" "$profile"
 run_stage install-work-tools "$repo_dir/bin/install-work-tools"
-run_stage install-walker "$repo_dir/bin/install-walker"
 run_stage dotfiles-preflight make -C "$dotfiles_dir" preflight-ubuntu
 run_stage dotfiles-link make -C "$dotfiles_dir" stow-ubuntu
-
-elephant_bin=$HOME/.local/bin/elephant
-[ -x "$elephant_bin" ] || configuration_error "Elephant is unavailable after Walker installation: $elephant_bin"
-run_stage elephant-service-enable "$elephant_bin" service enable
-run_stage elephant-service-start systemctl --user start elephant.service
 
 config_home=${XDG_CONFIG_HOME:-$HOME/.config}
 case $config_home in
