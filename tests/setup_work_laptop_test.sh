@@ -24,7 +24,7 @@ fake_home="$tmp_dir/home"
 fake_bin="$tmp_dir/fake-bin"
 log="$tmp_dir/actions.log"
 mkdir -p "$fake_repo/bin" "$fake_repo/lib" "$fake_repo/profiles" \
-  "$fake_repo/docs" "$fake_dotfiles/scripts" "$fake_home" "$fake_bin"
+  "$fake_repo/docs" "$fake_dotfiles/scripts" "$fake_home/.local/bin" "$fake_bin"
 cp bin/setup-work-laptop "$fake_repo/bin/setup-work-laptop"
 cp lib/common.sh lib/platform.sh "$fake_repo/lib/"
 : >"$fake_repo/profiles/work.apt.txt"
@@ -43,9 +43,19 @@ if [ "${SETUP_FAIL_STAGE:-}" = "$name" ]; then
 fi
 EOF
 chmod +x "$fake_repo/bin/fake-component"
-for component in bootstrap install-wezterm apply install-work-tools doctor install-sway-nvidia-session; do
+for component in bootstrap install-wezterm apply install-work-tools install-walker doctor install-sway-nvidia-session; do
   ln -s fake-component "$fake_repo/bin/$component"
 done
+
+cat >"$fake_bin/elephant" <<'EOF'
+#!/bin/bash
+printf 'elephant %s\n' "$*" >>"$SETUP_TEST_LOG"
+EOF
+cat >"$fake_bin/systemctl" <<'EOF'
+#!/bin/bash
+printf 'systemctl %s\n' "$*" >>"$SETUP_TEST_LOG"
+EOF
+ln -s "$fake_bin/elephant" "$fake_home/.local/bin/elephant"
 
 cat >"$fake_dotfiles/scripts/setup-local-laptop.sh" <<'EOF'
 #!/bin/bash
@@ -168,8 +178,11 @@ for action in \
   'install-wezterm ' \
   'apply work' \
   'install-work-tools ' \
+  'install-walker ' \
   "make -C $fake_dotfiles preflight-ubuntu" \
   "make -C $fake_dotfiles stow-ubuntu" \
+  'elephant service enable' \
+  'systemctl --user start elephant.service' \
   "sway --validate -c $fake_home/.config/sway/config" \
   'doctor work'; do
   assert_contains "$first_log" "$action" "standard first pass invokes $action"
