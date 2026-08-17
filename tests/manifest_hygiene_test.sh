@@ -85,7 +85,6 @@ eza
 go
 herdr
 obsidian
-opencode
 pi
 pnpm
 uv

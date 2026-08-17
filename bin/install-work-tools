@@ -89,7 +89,6 @@ for command_target in \
   "bun:$bin_dir/bun" \
   "bunx:$bin_dir/bunx" \
   "pnpm:$bin_dir/pnpm" \
-  "opencode:$bin_dir/opencode" \
   "pi:$bin_dir/pi" \
   "go:$bin_dir/go" \
   "difft:$bin_dir/difft" \
@@ -188,13 +187,6 @@ install_pnpm() {
   installer=$(download_installer pnpm https://get.pnpm.io/install.sh)
   HOME=$stage_home PNPM_HOME=$pnpm_root SHELL=/bin/sh ENV=$pnpm_shell_config sh "$installer" || install_error pnpm
   link_command "$pnpm_command" "$bin_dir/pnpm"
-}
-
-install_opencode() {
-  tool_ready opencode "$bin_dir/opencode" && return
-  installer=$(download_installer opencode https://opencode.ai/install)
-  HOME=$HOME bash "$installer" --no-modify-path || install_error opencode
-  link_command "$HOME/.opencode/bin/opencode" "$bin_dir/opencode"
 }
 
 install_pi() {
@@ -358,7 +350,6 @@ install_herdr
 install_uv
 install_bun
 install_pnpm
-install_opencode
 install_pi
 install_go
 

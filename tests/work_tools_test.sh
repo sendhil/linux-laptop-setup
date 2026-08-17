@@ -83,9 +83,6 @@ case $url in
   https://get.pnpm.io/install.sh)
     body='[ "${SHELL:-}" = /bin/sh ] || exit 41; [ "${ENV:-}" = "$HOME/.shrc" ] || exit 42; [ -f "$ENV" ] || exit 43; printf "export PNPM_HOME=%s\\n" "$PNPM_HOME" >>"$ENV"; mkdir -p "$PNPM_HOME/bin"; printf "#!/bin/sh\\nexit 0\\n" >"$PNPM_HOME/bin/pnpm"; chmod +x "$PNPM_HOME/bin/pnpm"'
     ;;
-  https://opencode.ai/install)
-    body='mkdir -p "$HOME/.opencode/bin"; printf "#!/bin/sh\\nexit 0\\n" >"$HOME/.opencode/bin/opencode"; chmod +x "$HOME/.opencode/bin/opencode"'
-    ;;
   https://pi.dev/install.sh)
     body='[ "${HOME##*/}" = pi-home ] || exit 51; [ "$ZDOTDIR" = "$HOME" ] || exit 52; mkdir -p "$HOME/.local/share/pi-node/current/bin"; printf "#!/bin/sh\\nexit 0\\n" >"$HOME/.local/share/pi-node/current/bin/pi"; chmod +x "$HOME/.local/share/pi-node/current/bin/pi"; printf "export PATH=changed\\n" >"$HOME/.zshrc"'
     ;;
@@ -162,7 +159,7 @@ assert_contains "$invalid_output" 'usage:' 'invalid work-tools input prints usag
 run_installer >/dev/null
 [ ! -e "$fake_home/.shrc" ] || fail 'pnpm installer modified the real shell configuration'
 [ ! -e "$fake_home/.zshrc" ] || fail 'Pi installer modified the real shell configuration'
-for command_name in go herdr uv uvx bun bunx pnpm opencode pi; do
+for command_name in go herdr uv uvx bun bunx pnpm pi; do
   [ -x "$fake_home/.local/bin/$command_name" ] || fail "$command_name was not installed into the user command directory"
 done
 assert_eq "$fake_home/.local/share/work-laptop-tools/go/go1.26.5/go/bin/go" \
@@ -179,7 +176,6 @@ for url in \
   https://astral.sh/uv/install.sh \
   https://bun.sh/install \
   https://get.pnpm.io/install.sh \
-  https://opencode.ai/install \
   https://pi.dev/install.sh \
   https://go.dev/dl/go1.26.5.linux-amd64.tar.gz; do
   assert_contains "$actions" "curl $url" "installer does not use the official source $url"

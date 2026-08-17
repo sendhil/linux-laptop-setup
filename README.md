@@ -71,7 +71,7 @@ instead of silently replacing administrator-managed configuration.
 
 `bin/install-work-tools` installs the reviewed user-facing work tools that are
 not supplied by Ubuntu. It uses the vendors' official installers for Herdr,
-uv/uvx, Bun/bunx, standalone pnpm, OpenCode, and Pi;
+uv/uvx, Bun/bunx, standalone pnpm, and Pi;
 the pinned Go 1.26.5 Linux amd64 archive from
 `https://go.dev/dl/go1.26.5.linux-amd64.tar.gz` after verifying SHA-256
 `5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053`;
